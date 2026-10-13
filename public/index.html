@@ -27,6 +27,12 @@
   <label class="attest">
     <input type="checkbox" id="attest" /> I own this domain or have permission to test it (required for non-localhost URL targets — attack modules stay localhost-only regardless)
   </label>
+  <details class="auth-box">
+    <summary>Authenticated scan (optional)</summary>
+    <p class="auth-note">Scan as a logged-in user. Sent only to the target's own origin, never to third parties, never saved to disk. Monitors always scan unauthenticated.</p>
+    <input id="auth-cookie" type="password" placeholder="Cookie header, e.g. session=abc123" autocomplete="off" />
+    <input id="auth-authorization" type="password" placeholder="Authorization header, e.g. Bearer eyJ…" autocomplete="off" />
+  </details>
   <p class="input-hint" id="input-hint">Detects what you pasted: a URL runs the live scan, a <code>github.com/owner/repo</code> link clones and audits it, a local path audits the code directly. 📎 uploads a .zip instead.</p>
   <p class="stat-line">2,300+ developers have scanned their apps. 50% of scanned apps had a high-risk vulnerability.</p>
 
