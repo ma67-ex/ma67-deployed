@@ -27,6 +27,12 @@
   <label class="attest">
     <input type="checkbox" id="attest" /> I own this domain or have permission to test it (required for non-localhost URL targets — attack modules stay localhost-only regardless)
   </label>
+  <details class="auth-box">
+    <summary>Authenticated scan (optional)</summary>
+    <p class="auth-note">Scan as a logged-in user. Sent only to the target's own origin, never to third parties, never saved to disk. Monitors always scan unauthenticated.</p>
+    <input id="auth-cookie" type="password" placeholder="Cookie header, e.g. session=abc123" autocomplete="off" />
+    <input id="auth-authorization" type="password" placeholder="Authorization header, e.g. Bearer eyJ…" autocomplete="off" />
+  </details>
   <p class="input-hint" id="input-hint">Detects what you pasted: a URL runs the live scan, a <code>github.com/owner/repo</code> link clones and audits it, a local path audits the code directly. 📎 uploads a .zip instead.</p>
   <p class="stat-line">2,300+ developers have scanned their apps. 50% of scanned apps had a high-risk vulnerability.</p>
 
@@ -93,6 +99,39 @@
     <h2>25 attack modules. Zero config.</h2>
     <p class="subtitle" style="font-size:14px;margin-bottom:24px;">Every scan runs real exploit scenarios against your live app, mimicking adversarial behavior. Attack-simulation modules only run against localhost — never a public domain. Paste a local path or GitHub URL instead and it runs the 16-item static code checklist (your security-checklist-audit skill) in place of these.</p>
     <div class="module-grid" id="module-grid"></div>
+  </section>
+
+  <section class="tools-section" id="tools">
+    <p class="eyebrow">FREE TOOLS</p>
+    <h2>Single-purpose checkers</h2>
+    <div class="tool-row">
+      <div class="tool-card">
+        <h3>Exposed API Key Checker</h3>
+        <p>Scans your frontend JavaScript and <code>.env</code> path for leaked secrets. Keys are shown masked.</p>
+        <form class="tool-form" id="keys-form">
+          <input id="keys-url" type="text" placeholder="https://yourapp.com" autocomplete="off" />
+          <button class="btn" type="submit">Scan for secrets</button>
+        </form>
+        <div class="tool-out" id="keys-out"></div>
+      </div>
+      <div class="tool-card">
+        <h3>Security Headers Checker</h3>
+        <p>Grades CSP, HSTS, X-Frame-Options, nosniff, Referrer-Policy and Permissions-Policy.</p>
+        <form class="tool-form" id="headers-form">
+          <input id="headers-url" type="text" placeholder="https://yourapp.com" autocomplete="off" />
+          <button class="btn" type="submit">Check headers</button>
+        </form>
+        <div class="tool-out" id="headers-out"></div>
+      </div>
+    </div>
+    <p class="input-hint">Public domains need the ownership checkbox above, same as the scanner.</p>
+  </section>
+
+  <section class="monitors-section" id="monitors">
+    <p class="eyebrow">MONITORING</p>
+    <h2>Re-scan on a schedule and on every deploy</h2>
+    <p class="subtitle" style="font-size:14px;margin-bottom:16px;">Add a monitor from any live scan result. Add <code>POST /api/monitors/&lt;id&gt;/trigger</code> to your deploy pipeline to scan right after each release.</p>
+    <div id="monitor-list"></div>
   </section>
 
   <section class="pricing-section">

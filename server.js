@@ -6,8 +6,15 @@ const fs = require('fs');
 const os = require('os');
 const { execFile } = require('child_process');
 const multer = require('multer');
-const { runScan } = require('./checks/scan');
+const { runScan, checkExposedFiles } = require('./checks/scan');
+const { discoverRoutes } = require('./checks/crawl');
+const { findSecrets } = require('./checks/secrets');
+const { checkHeaderGrade } = require('./checks/headers');
+const { annotateFindings } = require('./checks/fixes');
+const { sanitizeAuth, withAuth } = require('./checks/http');
 const history = require('./history');
+const monitors = require('./monitors');
+const report = require('./report');
 
 const upload = multer({ dest: os.tmpdir(), limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB cap on uploaded zips
 
@@ -28,6 +35,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   // HSTS only matters over HTTPS, but harmless to send over local HTTP too —
   // real deploys behind TLS will have it take effect immediately.
   res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
@@ -94,34 +102,163 @@ async function assertAuthorized(hostname, attested) {
   }
 }
 
-app.post('/api/scan', async (req, res) => {
-  const { url, attestOwnership } = req.body || {};
+// Parses + authorizes a target URL. Returns { base, hostname } or sends the
+// error response itself and returns null.
+async function resolveTarget(res, url, attested) {
   let target;
   try {
     target = new URL(url);
     if (!['http:', 'https:'].includes(target.protocol)) throw new Error('bad protocol');
   } catch {
-    return res.status(400).json({ error: 'Enter a valid http(s) URL.' });
+    res.status(400).json({ error: 'Enter a valid http(s) URL.' });
+    return null;
   }
-
   try {
-    await assertAuthorized(target.hostname, attestOwnership);
+    await assertAuthorized(target.hostname, attested);
   } catch (e) {
-    return res.status(403).json({ error: e.message, code: e.code });
+    res.status(403).json({ error: e.message, code: e.code });
+    return null;
   }
+  return { base: `${target.protocol}//${target.host}`, hostname: target.hostname };
+}
 
+// One full live scan: route discovery + every check, optionally carrying a
+// logged-in session (Cookie/Authorization) to same-origin requests only.
+async function performScan(base, hostname, { onProgress, authHeaders } = {}) {
+  const aggressive = LOCAL_HOSTNAMES.has(hostname);
+  return withAuth(new URL(base).origin, authHeaders, async () => {
+    onProgress?.('Route Discovery');
+    const surface = await discoverRoutes(base);
+    const found = await runScan(base, onProgress, aggressive);
+    const findings = annotateFindings([...found, ...surface.findings], surface.stack);
+    return { findings, routes: surface.routes, stack: surface.stack, aggressive, authenticated: !!authHeaders };
+  });
+}
+
+app.post('/api/scan', async (req, res) => {
+  const { url, attestOwnership, auth } = req.body || {};
+  const t = await resolveTarget(res, url, attestOwnership);
+  if (!t) return;
+
+  const authHeaders = sanitizeAuth(auth);
   res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Transfer-Encoding': 'chunked' });
   const send = (obj) => res.write(JSON.stringify(obj) + '\n');
+  send({ type: 'start', base: t.base, aggressive: LOCAL_HOSTNAMES.has(t.hostname), authenticated: !!authHeaders });
 
-  const base = `${target.protocol}//${target.host}`;
-  const isLiteralLocal = LOCAL_HOSTNAMES.has(target.hostname);
-  send({ type: 'start', base, aggressive: isLiteralLocal });
+  const scan = await performScan(t.base, t.hostname, {
+    authHeaders,
+    onProgress: (check) => send({ type: 'progress', check }),
+  });
+  const result = withHistory(t.base, scan.findings, scoreOf(scan.findings));
 
-  const findings = await runScan(base, (checkName) => send({ type: 'progress', check: checkName }), isLiteralLocal);
-  const result = withHistory(base, findings, scoreOf(findings));
-
-  send({ type: 'done', ...result });
+  send({ type: 'done', ...result, routes: scan.routes, stack: scan.stack, authenticated: scan.authenticated, target: t.base });
   res.end();
+});
+
+// --- Free tools -------------------------------------------------------------
+// Standalone single-purpose checkers, same authorization gate as the scanner.
+
+app.post('/api/tools/headers', async (req, res) => {
+  const { url, attestOwnership } = req.body || {};
+  const t = await resolveTarget(res, url, attestOwnership);
+  if (!t) return;
+  const result = await checkHeaderGrade(t.base);
+  if (!result) return res.status(502).json({ error: 'Could not reach the target.' });
+  res.json(result);
+});
+
+app.post('/api/tools/api-keys', async (req, res) => {
+  const { url, attestOwnership } = req.body || {};
+  const t = await resolveTarget(res, url, attestOwnership);
+  if (!t) return;
+  const hits = await findSecrets(t.base);
+  const envFindings = await checkExposedFiles(t.base);
+  res.json({
+    target: t.base,
+    secrets: hits, // already masked by the scanner
+    envExposed: envFindings.filter((f) => f.id === 'exposed-/.env').length > 0,
+  });
+});
+
+// --- Monitoring -------------------------------------------------------------
+
+async function runMonitor(m, trigger) {
+  const hostname = new URL(m.url).hostname;
+  if (!LOCAL_HOSTNAMES.has(hostname) && m.attested !== true) throw new Error('monitor target is not attested');
+  const scan = await performScan(m.url, hostname);
+  const result = withHistory(m.url, scan.findings, scoreOf(scan.findings));
+  const updated = monitors.recordRun(m.id, {
+    riskScore: result.riskScore,
+    findingCount: scan.findings.length,
+    newCount: result.diff ? result.diff.new.length : 0,
+    trigger,
+  });
+  return { monitor: updated, ...result };
+}
+
+app.get('/api/monitors', (req, res) => {
+  res.json({ monitors: monitors.list(), minIntervalMinutes: monitors.MIN_INTERVAL_MIN });
+});
+
+app.post('/api/monitors', async (req, res) => {
+  const { url, attestOwnership, intervalMinutes } = req.body || {};
+  const t = await resolveTarget(res, url, attestOwnership);
+  if (!t) return;
+  try {
+    const m = monitors.add({ url: t.base, attested: attestOwnership === true, intervalMinutes });
+    res.status(201).json({ monitor: m });
+  } catch (e) {
+    res.status(409).json({ error: e.message, code: e.code });
+  }
+});
+
+app.delete('/api/monitors/:id', (req, res) => {
+  if (!monitors.remove(req.params.id)) return res.status(404).json({ error: 'No such monitor.' });
+  res.json({ ok: true });
+});
+
+// "Scan on every deploy": call this from CI/CD after a deploy finishes.
+//   curl -X POST http://localhost:4100/api/monitors/<id>/trigger
+app.post('/api/monitors/:id/trigger', async (req, res) => {
+  const m = monitors.get(req.params.id);
+  if (!m) return res.status(404).json({ error: 'No such monitor.' });
+  try {
+    const out = await runMonitor(m, 'deploy');
+    res.json({ riskScore: out.riskScore, findings: out.findings.length, diff: out.diff, monitor: out.monitor });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// --- Printable report ---------------------------------------------------------
+
+app.post('/api/report', (req, res) => {
+  const { target, riskScore, findings, routes, stack } = req.body || {};
+  if (!Array.isArray(findings) || findings.length > 500) {
+    return res.status(400).json({ error: 'findings must be an array (max 500).' });
+  }
+  const clean = findings.map((f) => ({
+    severity: String(f.severity || ''),
+    title: String(f.title || ''),
+    evidence: String(f.evidence || ''),
+    fix: String(f.fix || ''),
+    patch: f.patch && typeof f.patch === 'object' ? { file: String(f.patch.file || ''), code: String(f.patch.code || '') } : null,
+  }));
+  const id = report.saveReport({
+    target: String(target || 'unknown'),
+    riskScore: Number(riskScore) || 0,
+    findings: clean,
+    routes: Array.isArray(routes) ? routes.slice(0, 120) : [],
+    stack: stack ? String(stack) : null,
+    generatedAt: new Date().toISOString(),
+  });
+  res.json({ url: `/report/${id}` });
+});
+
+app.get('/report/:id', (req, res) => {
+  const html = report.getReport(req.params.id);
+  if (!html) return res.status(404).send('Report not found (reports are kept in memory and cleared on restart).');
+  res.type('html').send(html);
 });
 
 // --- Codebase audit (static, local-filesystem) ------------------------------
@@ -194,7 +331,7 @@ async function auditDirAndRespond(res, dir, cleanup, targetKey) {
       return res.status(500).json({ error: 'security-checklist-audit skill not found at ' + CHECKLIST_SCAN_PY });
     }
     const result = await runChecklistScan(dir);
-    const findings = checklistToFindings(result);
+    const findings = annotateFindings(checklistToFindings(result), null);
     res.json(withHistory(targetKey, findings, scoreOf(findings)));
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -280,5 +417,7 @@ function withHistory(targetKey, findings, riskScore) {
     trend: history.getTrend(targetKey),
   };
 }
+
+monitors.startScheduler(runMonitor);
 
 app.listen(PORT, () => console.log(`deploysafe-clone running at http://localhost:${PORT}`));

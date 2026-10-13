@@ -2,26 +2,17 @@
 // brute force. Each check makes a handful of plain GET/OPTIONS requests and
 // inspects headers/body — nothing that could harm a target.
 
+const { HEADER_VALUES, finding, fetchSafe } = require('./http');
+const { checkJsSecrets } = require('./secrets');
+
 const SECURITY_HEADERS = [
   ['content-security-policy', 'Content-Security-Policy', 'Medium', 'Clickjacking / XSS surface is wider without a CSP.'],
   ['x-frame-options', 'X-Frame-Options', 'Medium', 'Page can be framed by any site — clickjacking risk.'],
   ['strict-transport-security', 'Strict-Transport-Security (HSTS)', 'Medium', 'Browser won\'t force HTTPS on repeat visits.'],
   ['x-content-type-options', 'X-Content-Type-Options', 'Low', 'Browser may MIME-sniff responses.'],
   ['referrer-policy', 'Referrer-Policy', 'Low', 'Full URLs (incl. query params) may leak via the Referer header.'],
+  ['permissions-policy', 'Permissions-Policy', 'Low', 'Camera, microphone and geolocation are not explicitly restricted for the page and its embeds.'],
 ];
-
-function finding(id, title, severity, evidence, fix) {
-  return { id, title, severity, evidence, fix };
-}
-
-async function fetchSafe(url, opts = {}) {
-  try {
-    const res = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(6000), ...opts });
-    return res;
-  } catch {
-    return null;
-  }
-}
 
 async function checkHeaders(base) {
   const res = await fetchSafe(base);
@@ -30,7 +21,7 @@ async function checkHeaders(base) {
   for (const [header, label, severity, why] of SECURITY_HEADERS) {
     if (!res.headers.get(header)) {
       out.push(finding(`header-${header}`, `Missing ${label}`, severity, why,
-        `Add header: ${label}: ${header === 'content-security-policy' ? "default-src 'self'" : header === 'x-frame-options' ? 'DENY' : header === 'strict-transport-security' ? 'max-age=63072000; includeSubDomains' : header === 'x-content-type-options' ? 'nosniff' : 'strict-origin-when-cross-origin'}`));
+        `Add header: ${label}: ${HEADER_VALUES[header]}`));
     }
   }
   return out;
@@ -154,6 +145,7 @@ const CHECK_LIST = [
   ['Robots/Sitemap', checkRobots],
   ['HTTP Methods', checkMethods],
   ['Source Maps', checkSourceMaps],
+  ['JS Secrets', checkJsSecrets],
   // These five were originally misfiled under AGGRESSIVE_CHECK_LIST even
   // though none of them send an attack payload — they only read what's
   // already public (homepage HTML, a JS bundle, package.json). That bug
@@ -164,7 +156,7 @@ const CHECK_LIST = [
   ['CSRF', checkCsrf],
   ['Upload Probe', checkUploadProbe],
   ['LocalStorage', checkLocalStorageUsage],
-  // Rate Limiting moved to AGGRESSIVE_CHECK_LIST (localhost-only) — it's an
+  // Rate Limiting lives in AGGRESSIVE_CHECK_LIST (localhost-only) — it's an
   // unreliable signal against real third-party sites (default fetch
   // multiplexes the burst over one kept-alive connection so real limits
   // never trip; forcing fresh connections instead just triggers generic
@@ -517,4 +509,4 @@ async function runScan(base, onProgress, includeAggressive) {
   return findings;
 }
 
-module.exports = { runScan, CHECK_LIST, AGGRESSIVE_CHECK_LIST };
+module.exports = { runScan, CHECK_LIST, AGGRESSIVE_CHECK_LIST, checkExposedFiles };

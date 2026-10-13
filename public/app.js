@@ -129,7 +129,7 @@ async function runLiveScan(url) {
     res = await fetch('/api/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, attestOwnership: attestBox.checked }),
+      body: JSON.stringify({ url, attestOwnership: attestBox.checked, auth: readAuth() }),
     });
   } catch {
     statusEl.textContent = '';
@@ -210,17 +210,39 @@ function trendHtml(trend) {
   return `<div class="trend-row">Risk score trend: ${scores.join(' → ')}</div>`;
 }
 
+function readAuth() {
+  const cookie = document.getElementById('auth-cookie').value.trim();
+  const authorization = document.getElementById('auth-authorization').value.trim();
+  return cookie || authorization ? { cookie, authorization } : undefined;
+}
+
 function toolbarHtml() {
   if (!lastRun) return '';
+  const isUrl = URL_RE.test(lastRun.label || '');
   return `
     <div class="toolbar-row">
       <button type="button" class="btn ghost" id="rescan-btn">↻ Re-scan</button>
-      <button type="button" class="btn ghost" id="export-btn">⬇ Export report</button>
+      <button type="button" class="btn ghost" id="export-btn">⬇ Export .md</button>
+      <button type="button" class="btn ghost" id="pdf-btn">🖨 PDF report</button>
+      ${isUrl ? '<button type="button" class="btn ghost" id="monitor-btn">◉ Monitor this app</button>' : ''}
     </div>`;
 }
 
-function renderResults({ findings, riskScore, diff, trend }, container, emptyNote) {
-  lastResultPayload = { findings, riskScore, diff, trend, target: lastRun && lastRun.label };
+function surfaceHtml(routes, stack, authenticated) {
+  if (!routes || !routes.length) return '';
+  const rows = routes.map((r) => `
+    <tr><td>${escapeHtml(r.method)}</td><td class="mono">${escapeHtml(r.path)}</td>
+    <td><span class="state ${escapeHtml(r.state)}">${escapeHtml(r.status === null ? '—' : r.status)} ${escapeHtml(r.state)}</span></td>
+    <td>${escapeHtml(r.source)}</td></tr>`).join('');
+  return `
+    <details class="surface-box" open>
+      <summary>Attack surface: ${routes.length} routes${stack ? ` · ${escapeHtml(stack)}` : ''}${authenticated ? ' · authenticated scan' : ''}</summary>
+      <table class="surface-table"><thead><tr><th>Method</th><th>Path</th><th>Status</th><th>Found via</th></tr></thead><tbody>${rows}</tbody></table>
+    </details>`;
+}
+
+function renderResults({ findings, riskScore, diff, trend, routes, stack, authenticated }, container, emptyNote) {
+  lastResultPayload = { findings, riskScore, diff, trend, routes, stack, target: lastRun && lastRun.label };
 
   if (!findings.length) {
     container.innerHTML = `
@@ -231,7 +253,8 @@ function renderResults({ findings, riskScore, diff, trend }, container, emptyNot
       </div>
       ${diffBadgesHtml(diff)}
       ${trendHtml(trend)}
-      <div class="empty-state">No issues found. (${emptyNote})</div>`;
+      <div class="empty-state">No issues found. (${emptyNote})</div>
+      ${surfaceHtml(routes, stack, authenticated)}`;
     wireToolbar(container);
     return;
   }
@@ -249,6 +272,7 @@ function renderResults({ findings, riskScore, diff, trend }, container, emptyNot
     </div>
     ${diffBadgesHtml(diff)}
     ${trendHtml(trend)}
+    ${surfaceHtml(routes, stack, authenticated)}
     ${findings.map((f, i) => `
       <div class="finding">
         <div class="finding-top">
@@ -257,7 +281,8 @@ function renderResults({ findings, riskScore, diff, trend }, container, emptyNot
         </div>
         <div class="finding-evidence">${escapeHtml(f.evidence)}</div>
         <div class="fix-toggle" data-fix-target="fix-${i}">▸ View fix</div>
-        <div class="fix-block" id="fix-${i}">${escapeHtml(f.fix)}</div>
+        <div class="fix-block" id="fix-${i}">${escapeHtml(f.fix)}${f.patch ? `\n\n— Patch template (${escapeHtml(f.patch.file)}) —\n${escapeHtml(f.patch.code)}` : ''}</div>
+        ${f.aiPrompt ? `<button type="button" class="btn ghost mini copy-prompt" data-finding="${i}">Copy fix prompt for Cursor / Claude</button>` : ''}
       </div>
     `).join('')}
   `;
@@ -270,7 +295,146 @@ function wireToolbar(container) {
 
   const exportBtn = container.querySelector('#export-btn');
   if (exportBtn) exportBtn.addEventListener('click', exportReport);
+
+  const pdfBtn = container.querySelector('#pdf-btn');
+  if (pdfBtn) pdfBtn.addEventListener('click', openPrintableReport);
+
+  const monitorBtn = container.querySelector('#monitor-btn');
+  if (monitorBtn) monitorBtn.addEventListener('click', addMonitor);
 }
+
+// Opens the popup synchronously (inside the click) so popup blockers allow it,
+// then points it at the server-rendered report once the POST returns.
+async function openPrintableReport() {
+  if (!lastResultPayload) return;
+  const win = window.open('', '_blank');
+  const { findings, riskScore, target, routes, stack } = lastResultPayload;
+  try {
+    const res = await fetch('/api/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target, riskScore, findings, routes, stack }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || 'report failed');
+    if (win) win.location.href = body.url; else window.location.href = body.url;
+  } catch (e) {
+    if (win) win.close();
+    showError(statusEl, `Could not build report: ${e.message}`);
+  }
+}
+
+async function addMonitor() {
+  if (!lastRun) return;
+  const url = lastRun.label;
+  let hostname = '';
+  try { hostname = new URL(url).hostname; } catch { /* handled by server */ }
+  if (!LOCAL_HOSTNAMES.has(hostname) && !attestBox.checked) {
+    return showError(statusEl, 'Check the ownership box before monitoring a public domain.');
+  }
+  const res = await fetch('/api/monitors', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, attestOwnership: attestBox.checked, intervalMinutes: 360 }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) return showError(statusEl, body.error || 'Could not add monitor.');
+  statusEl.textContent = 'Monitor added — re-scans every 6 hours.';
+  loadMonitors();
+}
+
+// --- Monitors panel ---------------------------------------------------------
+
+const monitorListEl = document.getElementById('monitor-list');
+
+async function loadMonitors() {
+  let body;
+  try {
+    body = await (await fetch('/api/monitors')).json();
+  } catch {
+    return;
+  }
+  if (!body.monitors.length) {
+    monitorListEl.innerHTML = '<div class="empty-state">No monitors yet. Run a live scan, then press “Monitor this app”.</div>';
+    return;
+  }
+  monitorListEl.innerHTML = body.monitors.map((m) => `
+    <div class="monitor-row">
+      <div>
+        <div class="finding-title">${escapeHtml(m.url)}</div>
+        <div class="finding-evidence">every ${m.intervalMinutes} min · last run ${m.lastRunAt ? escapeHtml(new Date(m.lastRunAt).toLocaleString()) : 'never'}
+          ${m.lastRunAt ? `· risk ${escapeHtml(m.lastRiskScore)} · ${escapeHtml(m.lastFindingCount)} findings · ${escapeHtml(m.lastNewFindings)} new` : ''}</div>
+        <div class="finding-evidence mono">POST /api/monitors/${escapeHtml(m.id)}/trigger</div>
+      </div>
+      <div class="monitor-actions">
+        <button type="button" class="btn ghost mini" data-monitor-run="${escapeHtml(m.id)}">Scan now</button>
+        <button type="button" class="btn ghost mini" data-monitor-del="${escapeHtml(m.id)}">Remove</button>
+      </div>
+    </div>`).join('');
+}
+
+monitorListEl.addEventListener('click', async (e) => {
+  const run = e.target.closest('[data-monitor-run]');
+  const del = e.target.closest('[data-monitor-del]');
+  if (run) {
+    run.disabled = true;
+    run.textContent = 'Scanning…';
+    await fetch(`/api/monitors/${run.dataset.monitorRun}/trigger`, { method: 'POST' });
+    loadMonitors();
+  } else if (del) {
+    await fetch(`/api/monitors/${del.dataset.monitorDel}`, { method: 'DELETE' });
+    loadMonitors();
+  }
+});
+
+loadMonitors();
+
+// --- Free tools -------------------------------------------------------------
+
+async function runTool(endpoint, url, outEl, render) {
+  if (!URL_RE.test(url)) return showError(outEl, 'Enter a full http(s) URL.');
+  let hostname = '';
+  try { hostname = new URL(url).hostname; } catch { /* server validates */ }
+  if (!LOCAL_HOSTNAMES.has(hostname) && !attestBox.checked) {
+    return showError(outEl, 'Check the ownership box at the top before testing a public domain.');
+  }
+  outEl.innerHTML = '<div class="status-line">checking…</div>';
+  let res;
+  try {
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, attestOwnership: attestBox.checked }),
+    });
+  } catch {
+    return showError(outEl, 'Could not reach the server.');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) return showError(outEl, body.error || `Failed (${res.status})`);
+  outEl.innerHTML = render(body);
+}
+
+document.getElementById('keys-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  runTool('/api/tools/api-keys', document.getElementById('keys-url').value.trim(), document.getElementById('keys-out'), (b) => {
+    if (!b.secrets.length && !b.envExposed) return '<div class="empty-state">No leaked secrets found in the page, its same-origin scripts or /.env.</div>';
+    const rows = b.secrets.map((s) => `<div class="finding"><div class="finding-top"><div class="finding-title">${escapeHtml(s.label)}</div><span class="sev ${escapeHtml(s.severity)}">${escapeHtml(s.severity)}</span></div><div class="finding-evidence mono">${escapeHtml(s.masked)} in ${escapeHtml(s.where)}</div></div>`).join('');
+    const env = b.envExposed ? '<div class="finding"><div class="finding-top"><div class="finding-title">/.env is publicly accessible</div><span class="sev Critical">Critical</span></div></div>' : '';
+    return rows + env + '<div class="tool-note">Rotate any key above, then move it server-side.</div>';
+  });
+});
+
+document.getElementById('headers-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  runTool('/api/tools/headers', document.getElementById('headers-url').value.trim(), document.getElementById('headers-out'), (b) => {
+    const rows = b.headers.map((h) => `
+      <tr><td>${escapeHtml(h.name)}</td><td><span class="state ${h.status === 'pass' ? 'open' : h.status === 'weak' ? 'redirect' : 'error'}">${escapeHtml(h.status)}</span></td>
+      <td>${escapeHtml(h.note)}</td></tr>`).join('');
+    const leaks = b.leaks.length ? `<div class="tool-note">Version info leaked: ${b.leaks.map((l) => escapeHtml(`${l.name}: ${l.value}`)).join(', ')}</div>` : '';
+    return `<div class="grade-row"><div class="grade">${escapeHtml(b.grade)}</div><div>${escapeHtml(b.score)}/100 for ${escapeHtml(b.target)}</div></div>
+      <table class="surface-table"><thead><tr><th>Header</th><th>Result</th><th>Why</th></tr></thead><tbody>${rows}</tbody></table>${leaks}`;
+  });
+});
 
 function exportReport() {
   if (!lastResultPayload) return;
@@ -306,7 +470,18 @@ function exportReport() {
 // Event delegation instead of inline onclick= (CSP's script-src 'self' blocks
 // inline handlers, same reason the old "Scan Now Free" onclick silently did
 // nothing — see findings this scanner reported against itself).
-resultsEl.addEventListener('click', (e) => {
+resultsEl.addEventListener('click', async (e) => {
+  const copy = e.target.closest('.copy-prompt');
+  if (copy && lastResultPayload) {
+    const f = lastResultPayload.findings[Number(copy.dataset.finding)];
+    try {
+      await navigator.clipboard.writeText(f.aiPrompt);
+      copy.textContent = 'Copied ✓';
+    } catch {
+      copy.textContent = 'Copy failed — select the fix text instead';
+    }
+    return;
+  }
   const toggle = e.target.closest('.fix-toggle');
   if (!toggle) return;
   document.getElementById(toggle.dataset.fixTarget)?.classList.toggle('open');
