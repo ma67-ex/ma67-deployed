@@ -242,3 +242,34 @@ h1 .accent { color: var(--brand2); display: block; }
   h1 { font-size: 44px; }
   .pricing-row { flex-direction: column; }
 }
+
+/* --- added: attack surface, tools, monitors, auth box --- */
+.mono { font-family: ui-monospace, monospace; font-size: 12.5px; }
+.btn.mini { font-size: 12px; padding: 6px 10px; margin-top: 10px; }
+.auth-box { max-width: 520px; margin: 0 auto 14px; text-align: left; font-size: 13px; color: var(--muted); }
+.auth-box summary { cursor: pointer; color: var(--brand2); }
+.auth-box input { width: 100%; margin-top: 8px; padding: 10px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; color: var(--foreground); font: inherit; }
+.auth-note { font-size: 12px; margin: 8px 0 0; }
+.surface-box { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 12px; }
+.surface-box summary { cursor: pointer; font-size: 13.5px; font-weight: 500; }
+.surface-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12.5px; }
+.surface-table th, .surface-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.surface-table th { color: var(--muted); font-weight: 500; }
+.state { font-size: 11.5px; padding: 2px 8px; border-radius: 12px; background: #ffffff10; }
+.state.open { color: #4ade80; }
+.state.protected { color: var(--medium); }
+.state.redirect { color: var(--medium); }
+.state.error, .state.unreachable { color: var(--critical); }
+.tools-section, .monitors-section { margin-top: 56px; text-align: center; }
+.tool-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; text-align: left; }
+.tool-card { flex: 1 1 320px; max-width: 460px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+.tool-card h3 { margin: 0 0 6px; font-size: 15px; }
+.tool-card p { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+.tool-form { display: flex; gap: 8px; }
+.tool-form input { flex: 1; min-width: 0; padding: 10px 12px; background: var(--background); border: 1px solid var(--border); border-radius: 8px; color: var(--foreground); font: inherit; }
+.tool-out { margin-top: 14px; }
+.tool-note { color: var(--muted); font-size: 12.5px; margin-top: 10px; }
+.grade-row { display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--muted); }
+.grade { font-size: 38px; font-weight: 600; color: var(--foreground); }
+.monitor-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; text-align: left; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; }
+.monitor-actions { display: flex; gap: 6px; flex-shrink: 0; }
