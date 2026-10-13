@@ -4,26 +4,19 @@
 const { HEADER_VALUES, fetchSafe } = require('./http');
 
 const SPEC = [
-  { key: 'content-security-policy', label: 'Content-Security-Policy', weight: 27, why: 'Strongest browser-side defense against XSS.' },
-  { key: 'strict-transport-security', label: 'Strict-Transport-Security', weight: 22, why: 'Stops protocol downgrade to plain HTTP.' },
-  { key: 'x-content-type-options', label: 'X-Content-Type-Options', weight: 17, why: 'Stops MIME-sniffing of responses.' },
-  { key: 'x-frame-options', label: 'X-Frame-Options', weight: 17, why: 'Blocks clickjacking by other sites framing the page.' },
-  { key: 'referrer-policy', label: 'Referrer-Policy', weight: 17, why: 'Limits URL leakage to third parties.' },
+  { key: 'strict-transport-security', label: 'Strict-Transport-Security', weight: 40, why: 'Stops protocol downgrade to plain HTTP.' },
+  { key: 'x-frame-options', label: 'X-Frame-Options', weight: 30, why: 'Blocks clickjacking by other sites framing the page.' },
+  { key: 'x-content-type-options', label: 'X-Content-Type-Options', weight: 30, why: 'Stops MIME-sniffing of responses.' },
 ];
 
 function judge(key, value, allHeaders) {
   const v = value.toLowerCase();
-  if (key === 'content-security-policy') {
-    if (/unsafe-eval/.test(v) || /(^|[\s;])script-src[^;]*'unsafe-inline'/.test(v)) return ['weak', "script-src allows 'unsafe-inline'/'unsafe-eval', which undoes most XSS protection."];
-    if (/default-src\s+\*|script-src\s+\*/.test(v)) return ['weak', 'Wildcard source allows scripts from anywhere.'];
-  }
   if (key === 'strict-transport-security') {
     const age = Number((v.match(/max-age=(\d+)/) || [])[1] || 0);
     if (age < 15552000) return ['weak', `max-age=${age} is under 6 months; use 31536000 or more.`];
   }
   if (key === 'x-frame-options' && !/deny|sameorigin/.test(v)) return ['weak', 'Use DENY or SAMEORIGIN.'];
   if (key === 'x-content-type-options' && v.trim() !== 'nosniff') return ['weak', 'Value must be nosniff.'];
-  if (key === 'referrer-policy' && /unsafe-url|no-referrer-when-downgrade/.test(v)) return ['weak', 'Policy still leaks full URLs cross-origin.'];
   return ['pass', null];
 }
 

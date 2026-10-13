@@ -10,11 +10,9 @@ const authStore = new AsyncLocalStorage();
 // Values we recommend per header, shared by the header check, the grader and
 // the patch generator so the three never drift apart.
 const HEADER_VALUES = {
-  'content-security-policy': "default-src 'self'",
   'x-frame-options': 'DENY',
   'strict-transport-security': 'max-age=63072000; includeSubDomains',
   'x-content-type-options': 'nosniff',
-  'referrer-policy': 'strict-origin-when-cross-origin',
 };
 
 function finding(id, title, severity, evidence, fix) {

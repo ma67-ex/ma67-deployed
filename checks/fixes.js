@@ -4,11 +4,9 @@
 const { HEADER_VALUES } = require('./http');
 
 const HEADER_NAMES = {
-  'content-security-policy': 'Content-Security-Policy',
   'x-frame-options': 'X-Frame-Options',
   'strict-transport-security': 'Strict-Transport-Security',
   'x-content-type-options': 'X-Content-Type-Options',
-  'referrer-policy': 'Referrer-Policy',
 };
 
 function headerPatch(key, stack) {

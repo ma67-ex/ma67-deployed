@@ -6,11 +6,9 @@ const { HEADER_VALUES, finding, fetchSafe } = require('./http');
 const { checkJsSecrets } = require('./secrets');
 
 const SECURITY_HEADERS = [
-  ['content-security-policy', 'Content-Security-Policy', 'Medium', 'Clickjacking / XSS surface is wider without a CSP.'],
   ['x-frame-options', 'X-Frame-Options', 'Medium', 'Page can be framed by any site — clickjacking risk.'],
   ['strict-transport-security', 'Strict-Transport-Security (HSTS)', 'Medium', 'Browser won\'t force HTTPS on repeat visits.'],
   ['x-content-type-options', 'X-Content-Type-Options', 'Low', 'Browser may MIME-sniff responses.'],
-  ['referrer-policy', 'Referrer-Policy', 'Low', 'Full URLs (incl. query params) may leak via the Referer header.'],
 ];
 
 async function checkHeaders(base) {
