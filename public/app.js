@@ -129,7 +129,7 @@ async function runLiveScan(url) {
     res = await fetch('/api/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, attestOwnership: attestBox.checked }),
+      body: JSON.stringify({ url, attestOwnership: attestBox.checked, auth: readAuth() }),
     });
   } catch {
     statusEl.textContent = '';
