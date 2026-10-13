@@ -11,7 +11,7 @@ const { discoverRoutes } = require('./checks/crawl');
 const { findSecrets } = require('./checks/secrets');
 const { checkHeaderGrade } = require('./checks/headers');
 const { annotateFindings } = require('./checks/fixes');
-const { sanitizeAuth, withAuth } = require('./checks/http');
+const { sanitizeAuth, withAuth, resolveFinalUrl } = require('./checks/http');
 const history = require('./history');
 const monitors = require('./monitors');
 const report = require('./report');
@@ -119,7 +119,13 @@ async function resolveTarget(res, url, attested) {
     res.status(403).json({ error: e.message, code: e.code });
     return null;
   }
-  return { base: `${target.protocol}//${target.host}`, hostname: target.hostname };
+  // hostname (for the localhost/aggressive gate and history key) is always
+  // the ORIGINAL host the user asked for, authorized above. base is the
+  // final same-site URL after following redirects (http→https, bare→www),
+  // so checks actually inspect the real page instead of a 301 stub.
+  const entry = `${target.protocol}//${target.host}`;
+  const base = await resolveFinalUrl(entry);
+  return { base, hostname: target.hostname };
 }
 
 // One full live scan: route discovery + every check, optionally carrying a

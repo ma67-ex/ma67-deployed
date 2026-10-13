@@ -59,4 +59,38 @@ function withAuth(origin, headers, fn) {
   return authStore.run({ origin, headers }, fn);
 }
 
-module.exports = { HEADER_VALUES, finding, fetchSafe, sanitizeAuth, withAuth };
+// Same-site check for redirect-following below: only treats a redirect as
+// "the site moving itself" (http→https, bare domain→www, etc.), never an
+// arbitrary third party — a malicious/compromised site could otherwise
+// redirect-rebind our scan onto someone else's domain without their
+// attestation. "example.com" and "www.example.com" count as the same site;
+// anything else doesn't.
+function sameSite(hostA, hostB) {
+  const strip = (h) => h.replace(/^www\./, '');
+  return strip(hostA) === strip(hostB);
+}
+
+// Resolves through up to maxHops same-site redirects (http→https, bare→www,
+// trailing slash, etc.) and returns the final URL actually reached — or the
+// original if there's no redirect or it leaves the site. Checks like
+// checkHeaders/checkCookies should run against this, not the raw input URL:
+// a bare domain that 301s to https://www.… almost never carries its own
+// security headers on the redirect hop itself, which was making every real
+// site look identical ("missing CSP/HSTS/..." on nearly everything).
+async function resolveFinalUrl(url, maxHops = 5) {
+  let current = url;
+  const startHost = new URL(url).hostname;
+  for (let i = 0; i < maxHops; i++) {
+    const res = await fetchSafe(current);
+    if (!res || ![301, 302, 303, 307, 308].includes(res.status)) return current;
+    const loc = res.headers.get('location');
+    if (!loc) return current;
+    let next;
+    try { next = new URL(loc, current).toString(); } catch { return current; }
+    if (!sameSite(startHost, new URL(next).hostname)) return current; // stop before leaving the site
+    current = next;
+  }
+  return current;
+}
+
+module.exports = { HEADER_VALUES, finding, fetchSafe, sanitizeAuth, withAuth, resolveFinalUrl };
