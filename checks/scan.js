@@ -11,7 +11,6 @@ const SECURITY_HEADERS = [
   ['strict-transport-security', 'Strict-Transport-Security (HSTS)', 'Medium', 'Browser won\'t force HTTPS on repeat visits.'],
   ['x-content-type-options', 'X-Content-Type-Options', 'Low', 'Browser may MIME-sniff responses.'],
   ['referrer-policy', 'Referrer-Policy', 'Low', 'Full URLs (incl. query params) may leak via the Referer header.'],
-  ['permissions-policy', 'Permissions-Policy', 'Low', 'Camera, microphone and geolocation are not explicitly restricted for the page and its embeds.'],
 ];
 
 async function checkHeaders(base) {
@@ -54,29 +53,6 @@ async function checkExposedFiles(base) {
         out.push(finding(`exposed-${path}`, title, severity, `${desc} at ${path}`,
           'Block the path at the web server / reverse proxy, remove it from the deploy artifact, and rotate any leaked secrets immediately.'));
       }
-    }
-  }
-  return out;
-}
-
-async function checkCookies(base) {
-  const res = await fetchSafe(base);
-  if (!res) return [];
-  const cookies = typeof res.headers.getSetCookie === 'function'
-    ? res.headers.getSetCookie()
-    : (res.headers.get('set-cookie') ? [res.headers.get('set-cookie')] : []);
-  const out = [];
-  for (const c of cookies) {
-    const lc = c.toLowerCase();
-    const missing = [];
-    if (!lc.includes('httponly')) missing.push('HttpOnly');
-    if (!lc.includes('secure')) missing.push('Secure');
-    if (!lc.includes('samesite')) missing.push('SameSite');
-    if (missing.length) {
-      out.push(finding('cookie-flags', 'Cookie missing security flags', 'Medium',
-        `${c.split('=')[0]} is missing: ${missing.join(', ')}`,
-        'Set cookies with HttpOnly; Secure; SameSite=Lax (or Strict) to reduce theft/CSRF risk.'));
-      break; // one finding is enough, avoid spam
     }
   }
   return out;
@@ -141,7 +117,6 @@ const CHECK_LIST = [
   ['Security Headers', checkHeaders],
   ['CORS Config', checkCors],
   ['Exposed Files', checkExposedFiles],
-  ['Cookie Audit', checkCookies],
   ['Robots/Sitemap', checkRobots],
   ['HTTP Methods', checkMethods],
   ['Source Maps', checkSourceMaps],

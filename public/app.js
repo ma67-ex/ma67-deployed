@@ -12,7 +12,6 @@ const MODULES = [
   ['NoSQL Injection', 'Auth bypass via query'],
   ['Error Disclosure', 'Stack traces leaked'],
   ['Open Redirects', 'Phishing via your domain'],
-  ['Cookie Audit', 'Session theft'],
   ['Path Traversal', 'Read server files'],
   ['Dependency Scan', 'Exposed version info'],
   ['Data Exposure', 'PII leaked'],
@@ -25,7 +24,7 @@ const MODULES = [
   ['HTTP Methods', 'PUT/DELETE exposed'],
   ['Robots/Sitemap', 'Hidden routes exposed'],
 ];
-const SAFE_MODULE_NAMES = new Set(['CORS Misconfig', 'Source Maps', 'Header Audit', 'Cookie Audit', 'Env Leak', 'HTTP Methods', 'Robots/Sitemap', 'Dependency Scan', 'Data Exposure', 'CSRF', 'Upload Probe', 'LocalStorage']);
+const SAFE_MODULE_NAMES = new Set(['CORS Misconfig', 'Source Maps', 'Header Audit', 'Env Leak', 'HTTP Methods', 'Robots/Sitemap', 'Dependency Scan', 'Data Exposure', 'CSRF', 'Upload Probe', 'LocalStorage']);
 
 document.getElementById('module-grid').innerHTML = MODULES.map(([name, impact]) => `
   <div class="module-card ${SAFE_MODULE_NAMES.has(name) ? '' : 'aggressive'}">
@@ -230,13 +229,20 @@ function toolbarHtml() {
 
 function surfaceHtml(routes, stack, authenticated) {
   if (!routes || !routes.length) return '';
-  const rows = routes.map((r) => `
+  // Discovery finds far more links than the probe budget covers (a locale
+  // switcher alone can be 50+ links) — rows the crawler never got to probe
+  // carry no information (state stays 'unprobed', status null), so they're
+  // dropped from the table instead of flooding it; the count is still shown.
+  const probed = routes.filter((r) => r.state !== 'unprobed');
+  const unprobedCount = routes.length - probed.length;
+  if (!probed.length) return '';
+  const rows = probed.map((r) => `
     <tr><td>${escapeHtml(r.method)}</td><td class="mono">${escapeHtml(r.path)}</td>
     <td><span class="state ${escapeHtml(r.state)}">${escapeHtml(r.status === null ? '—' : r.status)} ${escapeHtml(r.state)}</span></td>
     <td>${escapeHtml(r.source)}</td></tr>`).join('');
   return `
-    <details class="surface-box" open>
-      <summary>Attack surface: ${routes.length} routes${stack ? ` · ${escapeHtml(stack)}` : ''}${authenticated ? ' · authenticated scan' : ''}</summary>
+    <details class="surface-box">
+      <summary>Attack surface: ${probed.length} probed${unprobedCount ? ` (+${unprobedCount} discovered but not probed)` : ''}${stack ? ` · ${escapeHtml(stack)}` : ''}${authenticated ? ' · authenticated scan' : ''}</summary>
       <table class="surface-table"><thead><tr><th>Method</th><th>Path</th><th>Status</th><th>Found via</th></tr></thead><tbody>${rows}</tbody></table>
     </details>`;
 }
@@ -254,7 +260,8 @@ function renderResults({ findings, riskScore, diff, trend, routes, stack, authen
       ${diffBadgesHtml(diff)}
       ${trendHtml(trend)}
       <div class="empty-state">No issues found. (${emptyNote})</div>
-      ${surfaceHtml(routes, stack, authenticated)}`;
+      ${surfaceHtml(routes, stack, authenticated)}
+    `;
     wireToolbar(container);
     return;
   }
@@ -272,7 +279,6 @@ function renderResults({ findings, riskScore, diff, trend, routes, stack, authen
     </div>
     ${diffBadgesHtml(diff)}
     ${trendHtml(trend)}
-    ${surfaceHtml(routes, stack, authenticated)}
     ${findings.map((f, i) => `
       <div class="finding">
         <div class="finding-top">

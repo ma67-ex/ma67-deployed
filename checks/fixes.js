@@ -9,7 +9,6 @@ const HEADER_NAMES = {
   'strict-transport-security': 'Strict-Transport-Security',
   'x-content-type-options': 'X-Content-Type-Options',
   'referrer-policy': 'Referrer-Policy',
-  'permissions-policy': 'Permissions-Policy',
 };
 
 function headerPatch(key, stack) {
@@ -49,14 +48,6 @@ const TRUSTED = (process.env.TRUSTED_ORIGINS || '').split(',').filter(Boolean);
 app.use(cors({
   origin: (origin, cb) => cb(null, !origin || TRUSTED.includes(origin)),
 }));` };
-  }
-  if (id === 'cookie-flags') {
-    return { file: 'wherever the cookie is set', language: 'js', code:
-`res.cookie('session', token, {
-  httpOnly: true,
-  secure: true,
-  sameSite: 'lax',
-});` };
   }
   if (id === 'rate-limit') {
     return { file: 'server entry (Express + express-rate-limit)', language: 'js', code:

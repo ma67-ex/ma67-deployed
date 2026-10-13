@@ -15,7 +15,6 @@ const HEADER_VALUES = {
   'strict-transport-security': 'max-age=63072000; includeSubDomains',
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'strict-origin-when-cross-origin',
-  'permissions-policy': 'camera=(), microphone=(), geolocation=()',
 };
 
 function finding(id, title, severity, evidence, fix) {
@@ -73,7 +72,7 @@ function sameSite(hostA, hostB) {
 // Resolves through up to maxHops same-site redirects (http→https, bare→www,
 // trailing slash, etc.) and returns the final URL actually reached — or the
 // original if there's no redirect or it leaves the site. Checks like
-// checkHeaders/checkCookies should run against this, not the raw input URL:
+// checkHeaders and friends should run against this, not the raw input URL:
 // a bare domain that 301s to https://www.… almost never carries its own
 // security headers on the redirect hop itself, which was making every real
 // site look identical ("missing CSP/HSTS/..." on nearly everything).
