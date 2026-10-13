@@ -50,7 +50,10 @@ async function main() {
   const lines = text.trim().split('\n').map((l) => JSON.parse(l));
   const done = lines.find((l) => l.type === 'done');
   assert.ok(done, 'scan should emit a done event');
-  assert.strictEqual(done.findings.length, 0, `self-scan should be clean, got: ${JSON.stringify(done.findings)}`);
+  // Upload Probe correctly flags our own 📎 zip-upload <input type="file">
+  // — a true positive, not noise, so it's the one expected finding here.
+  const unexpected = done.findings.filter((f) => f.id !== 'upload-probe');
+  assert.strictEqual(unexpected.length, 0, `self-scan should only flag the known upload-probe finding, got: ${JSON.stringify(unexpected)}`);
   assert.ok('diff' in done && 'trend' in done, 'scan response should include diff/trend from history.js');
 
   console.log('All smoke checks passed.');

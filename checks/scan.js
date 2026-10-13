@@ -154,7 +154,23 @@ const CHECK_LIST = [
   ['Robots/Sitemap', checkRobots],
   ['HTTP Methods', checkMethods],
   ['Source Maps', checkSourceMaps],
-  ['Rate Limiting', checkRateLimit],
+  // These five were originally misfiled under AGGRESSIVE_CHECK_LIST even
+  // though none of them send an attack payload — they only read what's
+  // already public (homepage HTML, a JS bundle, package.json). That bug
+  // meant they silently never ran against any public target, which is why
+  // public scans looked thin/repetitive.
+  ['Dependency Scan', checkDependencyExposure],
+  ['Data Exposure', checkDataExposure],
+  ['CSRF', checkCsrf],
+  ['Upload Probe', checkUploadProbe],
+  ['LocalStorage', checkLocalStorageUsage],
+  // Rate Limiting moved to AGGRESSIVE_CHECK_LIST (localhost-only) — it's an
+  // unreliable signal against real third-party sites (default fetch
+  // multiplexes the burst over one kept-alive connection so real limits
+  // never trip; forcing fresh connections instead just triggers generic
+  // bot-blocking, not a real rate-limit signal) and bursting a site you
+  // don't control with 30 requests to find out is borderline abusive
+  // regardless of what it returns.
 ];
 
 // ---------------------------------------------------------------------------
@@ -477,17 +493,13 @@ const AGGRESSIVE_CHECK_LIST = [
   ['Broken Access Control', checkBrokenAccessControl],
   ['Supabase RLS', checkSupabaseRls],
   ['Firebase Rules', checkFirebaseRules],
-  ['CSRF', checkCsrf],
   ['Error Disclosure', checkErrorDisclosure],
   ['Open Redirects', checkOpenRedirect],
   ['Path Traversal', checkPathTraversal],
-  ['Dependency Scan', checkDependencyExposure],
-  ['Data Exposure', checkDataExposure],
   ['Prototype Pollution', checkPrototypePollution],
   ['Webhook Spoofing', checkWebhookSpoofing],
-  ['Upload Probe', checkUploadProbe],
-  ['LocalStorage', checkLocalStorageUsage],
   ['Middleware Bypass', checkMiddlewareBypass],
+  ['Rate Limiting', checkRateLimit],
 ];
 
 async function runScan(base, onProgress, includeAggressive) {

@@ -181,15 +181,10 @@ function checklistToFindings(result) {
       fix: 'Read the flagged file by hand — high false-positive rate by design (see the skill\'s own notes on agent-instruction files and install-lifecycle scripts).',
     });
   }
-  for (const page of (result.legal_pages && result.legal_pages.missing) || []) {
-    findings.push({
-      id: `legal-${page}`,
-      title: `Missing legal page: ${page}`,
-      severity: 'Low',
-      evidence: 'Not found by path or text-link match in scanned source.',
-      fix: 'Informational, not legal advice. Add the page if your app collects data / takes signups, and confirm requirements with an actual lawyer beyond a personal project.',
-    });
-  }
+  // Deliberately not surfacing result.legal_pages (privacy policy / terms /
+  // accessibility statement) here — this tool finds vulnerabilities, not
+  // legal/compliance gaps. The underlying skill still checks for them if
+  // you run it directly and want that.
   return findings;
 }
 

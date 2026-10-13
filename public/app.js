@@ -25,7 +25,7 @@ const MODULES = [
   ['HTTP Methods', 'PUT/DELETE exposed'],
   ['Robots/Sitemap', 'Hidden routes exposed'],
 ];
-const SAFE_MODULE_NAMES = new Set(['CORS Misconfig', 'Source Maps', 'Header Audit', 'Rate Limiting', 'Cookie Audit', 'Env Leak', 'HTTP Methods', 'Robots/Sitemap']);
+const SAFE_MODULE_NAMES = new Set(['CORS Misconfig', 'Source Maps', 'Header Audit', 'Cookie Audit', 'Env Leak', 'HTTP Methods', 'Robots/Sitemap', 'Dependency Scan', 'Data Exposure', 'CSRF', 'Upload Probe', 'LocalStorage']);
 
 document.getElementById('module-grid').innerHTML = MODULES.map(([name, impact]) => `
   <div class="module-card ${SAFE_MODULE_NAMES.has(name) ? '' : 'aggressive'}">
@@ -166,7 +166,7 @@ async function runLiveScan(url) {
   statusEl.textContent = '';
   btn.disabled = false;
   if (finalPayload) {
-    renderResults(finalPayload, resultsEl, 'Covers headers, CORS, exposed files, cookies, robots.txt, methods, source maps, basic rate-limit signal — not a full pentest.');
+    renderResults(finalPayload, resultsEl, 'Covers headers, CORS, exposed files, cookies, robots.txt, methods, source maps, dependency CVEs, data exposure, CSRF, upload/localStorage hygiene — not a full pentest.');
   }
 }
 
