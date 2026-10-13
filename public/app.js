@@ -253,7 +253,8 @@ function renderResults({ findings, riskScore, diff, trend, routes, stack, authen
       </div>
       ${diffBadgesHtml(diff)}
       ${trendHtml(trend)}
-      <div class="empty-state">No issues found. (${emptyNote})</div>`;
+      <div class="empty-state">No issues found. (${emptyNote})</div>
+      ${surfaceHtml(routes, stack, authenticated)}`;
     wireToolbar(container);
     return;
   }
