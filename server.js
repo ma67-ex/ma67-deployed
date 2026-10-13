@@ -422,4 +422,6 @@ function withHistory(targetKey, findings, riskScore) {
   };
 }
 
+monitors.startScheduler(runMonitor);
+
 app.listen(PORT, () => console.log(`deploysafe-clone running at http://localhost:${PORT}`));
