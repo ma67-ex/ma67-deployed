@@ -272,6 +272,7 @@ function renderResults({ findings, riskScore, diff, trend, routes, stack, authen
     </div>
     ${diffBadgesHtml(diff)}
     ${trendHtml(trend)}
+    ${surfaceHtml(routes, stack, authenticated)}
     ${findings.map((f, i) => `
       <div class="finding">
         <div class="finding-top">
@@ -280,7 +281,8 @@ function renderResults({ findings, riskScore, diff, trend, routes, stack, authen
         </div>
         <div class="finding-evidence">${escapeHtml(f.evidence)}</div>
         <div class="fix-toggle" data-fix-target="fix-${i}">▸ View fix</div>
-        <div class="fix-block" id="fix-${i}">${escapeHtml(f.fix)}</div>
+        <div class="fix-block" id="fix-${i}">${escapeHtml(f.fix)}${f.patch ? `\n\n— Patch template (${escapeHtml(f.patch.file)}) —\n${escapeHtml(f.patch.code)}` : ''}</div>
+        ${f.aiPrompt ? `<button type="button" class="btn ghost mini copy-prompt" data-finding="${i}">Copy fix prompt for Cursor / Claude</button>` : ''}
       </div>
     `).join('')}
   `;
