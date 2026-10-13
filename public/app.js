@@ -210,17 +210,39 @@ function trendHtml(trend) {
   return `<div class="trend-row">Risk score trend: ${scores.join(' → ')}</div>`;
 }
 
+function readAuth() {
+  const cookie = document.getElementById('auth-cookie').value.trim();
+  const authorization = document.getElementById('auth-authorization').value.trim();
+  return cookie || authorization ? { cookie, authorization } : undefined;
+}
+
 function toolbarHtml() {
   if (!lastRun) return '';
+  const isUrl = URL_RE.test(lastRun.label || '');
   return `
     <div class="toolbar-row">
       <button type="button" class="btn ghost" id="rescan-btn">↻ Re-scan</button>
-      <button type="button" class="btn ghost" id="export-btn">⬇ Export report</button>
+      <button type="button" class="btn ghost" id="export-btn">⬇ Export .md</button>
+      <button type="button" class="btn ghost" id="pdf-btn">🖨 PDF report</button>
+      ${isUrl ? '<button type="button" class="btn ghost" id="monitor-btn">◉ Monitor this app</button>' : ''}
     </div>`;
 }
 
-function renderResults({ findings, riskScore, diff, trend }, container, emptyNote) {
-  lastResultPayload = { findings, riskScore, diff, trend, target: lastRun && lastRun.label };
+function surfaceHtml(routes, stack, authenticated) {
+  if (!routes || !routes.length) return '';
+  const rows = routes.map((r) => `
+    <tr><td>${escapeHtml(r.method)}</td><td class="mono">${escapeHtml(r.path)}</td>
+    <td><span class="state ${escapeHtml(r.state)}">${escapeHtml(r.status === null ? '—' : r.status)} ${escapeHtml(r.state)}</span></td>
+    <td>${escapeHtml(r.source)}</td></tr>`).join('');
+  return `
+    <details class="surface-box" open>
+      <summary>Attack surface: ${routes.length} routes${stack ? ` · ${escapeHtml(stack)}` : ''}${authenticated ? ' · authenticated scan' : ''}</summary>
+      <table class="surface-table"><thead><tr><th>Method</th><th>Path</th><th>Status</th><th>Found via</th></tr></thead><tbody>${rows}</tbody></table>
+    </details>`;
+}
+
+function renderResults({ findings, riskScore, diff, trend, routes, stack, authenticated }, container, emptyNote) {
+  lastResultPayload = { findings, riskScore, diff, trend, routes, stack, target: lastRun && lastRun.label };
 
   if (!findings.length) {
     container.innerHTML = `
