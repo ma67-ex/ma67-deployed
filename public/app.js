@@ -470,7 +470,18 @@ function exportReport() {
 // Event delegation instead of inline onclick= (CSP's script-src 'self' blocks
 // inline handlers, same reason the old "Scan Now Free" onclick silently did
 // nothing — see findings this scanner reported against itself).
-resultsEl.addEventListener('click', (e) => {
+resultsEl.addEventListener('click', async (e) => {
+  const copy = e.target.closest('.copy-prompt');
+  if (copy && lastResultPayload) {
+    const f = lastResultPayload.findings[Number(copy.dataset.finding)];
+    try {
+      await navigator.clipboard.writeText(f.aiPrompt);
+      copy.textContent = 'Copied ✓';
+    } catch {
+      copy.textContent = 'Copy failed — select the fix text instead';
+    }
+    return;
+  }
   const toggle = e.target.closest('.fix-toggle');
   if (!toggle) return;
   document.getElementById(toggle.dataset.fixTarget)?.classList.toggle('open');
