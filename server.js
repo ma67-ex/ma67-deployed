@@ -6,8 +6,15 @@ const fs = require('fs');
 const os = require('os');
 const { execFile } = require('child_process');
 const multer = require('multer');
-const { runScan } = require('./checks/scan');
+const { runScan, checkExposedFiles } = require('./checks/scan');
+const { discoverRoutes } = require('./checks/crawl');
+const { findSecrets } = require('./checks/secrets');
+const { checkHeaderGrade } = require('./checks/headers');
+const { annotateFindings } = require('./checks/fixes');
+const { sanitizeAuth, withAuth } = require('./checks/http');
 const history = require('./history');
+const monitors = require('./monitors');
+const report = require('./report');
 
 const upload = multer({ dest: os.tmpdir(), limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB cap on uploaded zips
 
