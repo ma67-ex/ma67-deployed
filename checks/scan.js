@@ -145,6 +145,7 @@ const CHECK_LIST = [
   ['Robots/Sitemap', checkRobots],
   ['HTTP Methods', checkMethods],
   ['Source Maps', checkSourceMaps],
+  ['JS Secrets', checkJsSecrets],
   ['Rate Limiting', checkRateLimit],
 ];
 
