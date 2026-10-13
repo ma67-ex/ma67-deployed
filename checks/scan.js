@@ -497,4 +497,4 @@ async function runScan(base, onProgress, includeAggressive) {
   return findings;
 }
 
-module.exports = { runScan, CHECK_LIST, AGGRESSIVE_CHECK_LIST };
+module.exports = { runScan, CHECK_LIST, AGGRESSIVE_CHECK_LIST, checkExposedFiles };
