@@ -47,7 +47,7 @@ Requires Node.js, plus `git` and `unzip` on your `PATH` (both ship with
 macOS/Linux by default) for the GitHub-URL and zip-upload audit modes.
 
 ```bash
-git clone <this-repo-url>
+git clone https://github.com/ma67-ex/ma67-deployed.git
 cd deploysafe-clone
 npm install
 node server.js
