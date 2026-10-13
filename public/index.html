@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ma67-Deployed | Probe your app. Fix what matters.</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav>
+  <div class="logo"><span class="dot"></span>Ma67-Deployed</div>
+  <div class="nav-links"><span>Features</span><span>Pricing</span><span>Tools ▾</span></div>
+  <div class="nav-right"><span class="nav-free">Free · no sign-up</span></div>
+</nav>
+
+<main>
+  <h1>Hack your app <span class="accent">before it gets hacked.</span></h1>
+  <p class="subtitle">Paste your URL. We'll show you exactly what's broken.</p>
+
+  <form id="scan-form" class="scan-box">
+    <input id="url" type="text" placeholder="https://yourapp.com, a GitHub repo URL, or a local path" autocomplete="off" />
+    <label class="upload-btn" title="Audit a .zip of a codebase">
+      📎<input id="repo-zip" type="file" accept=".zip" hidden />
+    </label>
+    <button class="btn" type="submit" id="scan-btn">Scan</button>
+  </form>
+  <label class="attest">
+    <input type="checkbox" id="attest" /> I own this domain or have permission to test it (required for non-localhost URL targets — attack modules stay localhost-only regardless)
+  </label>
+  <p class="input-hint" id="input-hint">Detects what you pasted: a URL runs the live scan, a <code>github.com/owner/repo</code> link clones and audits it, a local path audits the code directly. 📎 uploads a .zip instead.</p>
+  <p class="stat-line">2,300+ developers have scanned their apps. 50% of scanned apps had a high-risk vulnerability.</p>
+
+  <div class="sample-findings">
+    <div class="sample-row"><span>.env file publicly accessible</span><span class="sev Critical">Critical</span></div>
+    <div class="sample-row"><span>No rate limiting on /api/auth</span><span class="sev High">High</span></div>
+    <div class="sample-row"><span>CORS allows wildcard origin</span><span class="sev Medium">Medium</span></div>
+  </div>
+
+  <div class="status-line" id="status"></div>
+  <div id="results"></div>
+
+  <section class="how-it-works">
+    <p class="eyebrow">How It Works</p>
+    <h2>From URL to patched. Under 5 minutes.</h2>
+
+    <div class="step-row">
+      <span class="step-tag">Detect</span><span class="step-tag dim">Attack</span><span class="step-tag dim">Fix</span>
+    </div>
+    <div class="step-panel">
+      <h3>Scan every route. In seconds.</h3>
+      <p>We map your entire attack surface automatically. Hidden APIs, undocumented endpoints, forgotten admin routes. We find them before anyone else does.</p>
+      <div class="route-log">
+        <div>GET /api/v1/health <span class="ok">200 OK</span></div>
+        <div>POST /api/v1/auth/admin <span class="bad">VULNERABLE</span></div>
+        <div>GET /dashboard/user <span class="ok">200 OK</span></div>
+        <div>PUT /api/v2/settings <span class="warn">WARNING</span></div>
+        <div>DELETE /api/v1/session <span class="ok">200 OK</span></div>
+      </div>
+    </div>
+
+    <div class="step-row">
+      <span class="step-tag dim">Detect</span><span class="step-tag">Attack</span><span class="step-tag dim">Fix</span>
+    </div>
+    <div class="step-panel">
+      <h3>Try to break in. Before hackers do.</h3>
+      <p>Every scan runs real exploit scenarios against your live app: auth bypass, privilege escalation, injection. We prove impact, not just list CVEs.</p>
+      <div class="attack-stats">
+        <div><div class="num">0</div><div class="label">UNAUTHORIZED LOGINS · IN 10 SECONDS</div></div>
+        <div><div class="num">0</div><div class="label">RISK SCORE</div></div>
+      </div>
+    </div>
+
+    <div class="step-row">
+      <span class="step-tag dim">Detect</span><span class="step-tag dim">Attack</span><span class="step-tag">Fix</span>
+    </div>
+    <div class="step-panel">
+      <h3>Fix it for you. One click. Shipped.</h3>
+      <p>Every finding comes with a production-ready patch tailored to your stack. Apply directly, or copy the prompt into Cursor, Claude, or whichever LLM you live in.</p>
+      <div class="patch-block">
+        <div class="patch-head">security_patch.py <span class="patch-badge">Auto-Fix</span></div>
+        <pre>+def configure_cors(app):
++    app.config['CORS_HEADERS'] = 'Content-Type'
+-    allow_origin = "*"
++    allow_origin = config.TRUSTED_DOMAINS
++    cors = CORS(app, resources={r"/api/*": {"origins": allow_origin}})
++    return app</pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="modules-section">
+    <p class="eyebrow">WHAT WE DETECT</p>
+    <h2>25 attack modules. Zero config.</h2>
+    <p class="subtitle" style="font-size:14px;margin-bottom:24px;">Every scan runs real exploit scenarios against your live app, mimicking adversarial behavior. Attack-simulation modules only run against localhost — never a public domain. Paste a local path or GitHub URL instead and it runs the 16-item static code checklist (your security-checklist-audit skill) in place of these.</p>
+    <div class="module-grid" id="module-grid"></div>
+  </section>
+
+  <section class="pricing-section">
+    <h2>Plans that scale with you</h2>
+    <p class="subtitle" style="font-size:14px;">This local clone: everything is already unlocked, no sign-up, no card, no plan. Cards below are a visual reference to the real product's pricing, not functional.</p>
+    <div class="pricing-row">
+      <div class="price-card">
+        <div class="price-name">Solo</div>
+        <div class="price-desc">Scan anything, monitor one app</div>
+        <div class="price-amt">$12<span>/mo</span></div>
+        <ul>
+          <li>Every finding unlocked</li>
+          <li>200 credits/mo (20 scans)</li>
+          <li>Monitor 1 app</li>
+          <li>Scans on every deploy</li>
+          <li>Authenticated scans</li>
+          <li>AI fix prompts</li>
+        </ul>
+        <button class="btn ghost" disabled>Already unlocked locally</button>
+      </div>
+      <div class="price-card popular">
+        <div class="price-badge">Most popular</div>
+        <div class="price-name">Pro</div>
+        <div class="price-desc">Where most teams start</div>
+        <div class="price-amt">$29<span>/mo</span></div>
+        <ul>
+          <li>Every finding unlocked</li>
+          <li>500 credits/mo (50 scans)</li>
+          <li>Monitor 3 apps</li>
+          <li>Scans on every deploy</li>
+          <li>Authenticated scans</li>
+          <li>AI fix prompts</li>
+          <li>Early access to new features</li>
+        </ul>
+        <button class="btn" disabled>Already unlocked locally</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="final-cta">
+    <h2>Ready to secure your app?</h2>
+    <p class="subtitle">No credits, no card, no sign-up — this clone runs fully local.</p>
+    <button class="btn" id="scan-now-btn">Scan Now Free</button>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
