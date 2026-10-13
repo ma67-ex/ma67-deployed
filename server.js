@@ -35,6 +35,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   // HSTS only matters over HTTPS, but harmless to send over local HTTP too —
   // real deploys behind TLS will have it take effect immediately.
   res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
