@@ -335,7 +335,7 @@ async function auditDirAndRespond(res, dir, cleanup, targetKey) {
       return res.status(500).json({ error: 'security-checklist-audit skill not found at ' + CHECKLIST_SCAN_PY });
     }
     const result = await runChecklistScan(dir);
-    const findings = checklistToFindings(result);
+    const findings = annotateFindings(checklistToFindings(result), null);
     res.json(withHistory(targetKey, findings, scoreOf(findings)));
   } catch (e) {
     res.status(500).json({ error: e.message });
