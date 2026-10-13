@@ -101,6 +101,39 @@
     <div class="module-grid" id="module-grid"></div>
   </section>
 
+  <section class="tools-section" id="tools">
+    <p class="eyebrow">FREE TOOLS</p>
+    <h2>Single-purpose checkers</h2>
+    <div class="tool-row">
+      <div class="tool-card">
+        <h3>Exposed API Key Checker</h3>
+        <p>Scans your frontend JavaScript and <code>.env</code> path for leaked secrets. Keys are shown masked.</p>
+        <form class="tool-form" id="keys-form">
+          <input id="keys-url" type="text" placeholder="https://yourapp.com" autocomplete="off" />
+          <button class="btn" type="submit">Scan for secrets</button>
+        </form>
+        <div class="tool-out" id="keys-out"></div>
+      </div>
+      <div class="tool-card">
+        <h3>Security Headers Checker</h3>
+        <p>Grades CSP, HSTS, X-Frame-Options, nosniff, Referrer-Policy and Permissions-Policy.</p>
+        <form class="tool-form" id="headers-form">
+          <input id="headers-url" type="text" placeholder="https://yourapp.com" autocomplete="off" />
+          <button class="btn" type="submit">Check headers</button>
+        </form>
+        <div class="tool-out" id="headers-out"></div>
+      </div>
+    </div>
+    <p class="input-hint">Public domains need the ownership checkbox above, same as the scanner.</p>
+  </section>
+
+  <section class="monitors-section" id="monitors">
+    <p class="eyebrow">MONITORING</p>
+    <h2>Re-scan on a schedule and on every deploy</h2>
+    <p class="subtitle" style="font-size:14px;margin-bottom:16px;">Add a monitor from any live scan result. Add <code>POST /api/monitors/&lt;id&gt;/trigger</code> to your deploy pipeline to scan right after each release.</p>
+    <div id="monitor-list"></div>
+  </section>
+
   <section class="pricing-section">
     <h2>Plans that scale with you</h2>
     <p class="subtitle" style="font-size:14px;">This local clone: everything is already unlocked, no sign-up, no card, no plan. Cards below are a visual reference to the real product's pricing, not functional.</p>
