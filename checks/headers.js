@@ -25,7 +25,6 @@ function judge(key, value, allHeaders) {
   if (key === 'x-frame-options' && !/deny|sameorigin/.test(v)) return ['weak', 'Use DENY or SAMEORIGIN.'];
   if (key === 'x-content-type-options' && v.trim() !== 'nosniff') return ['weak', 'Value must be nosniff.'];
   if (key === 'referrer-policy' && /unsafe-url|no-referrer-when-downgrade/.test(v)) return ['weak', 'Policy still leaks full URLs cross-origin.'];
-  if (key === 'x-frame-options') return ['pass', null];
   return ['pass', null];
 }
 
