@@ -1,5 +1,9 @@
 # Ma67-Deployed
 
+![Node](https://img.shields.io/badge/node-18%2B-339933)
+![Runs](https://img.shields.io/badge/runs-localhost%20only-2ea44f)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 A self-hosted, free, no-login clone of [deploysafe.io](https://deploysafe.io)'s
 scanning UI. Runs entirely on your own machine against targets you control.
 
@@ -82,3 +86,7 @@ feature set, for local/educational use. Not affiliated with DeploySafe.
 ## About the name
 
 "Ma67-Deployed" — a nod to ma67-ex (the author's handle), not DeploySafe's own branding.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
