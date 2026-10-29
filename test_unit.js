@@ -3,7 +3,7 @@ const assert = require('assert');
 const { scanText } = require('./checks/secrets');
 const { gradeHeaders } = require('./checks/headers');
 const { patchFor, buildPrompt, annotateFindings } = require('./checks/fixes');
-const { sanitizeAuth } = require('./checks/http');
+const { sanitizeAuth, isLocalHost } = require('./checks/http');
 const { classify, detectStack } = require('./checks/crawl');
 const { buildReportHtml } = require('./report');
 
@@ -92,6 +92,15 @@ const fakeAws = 'AKIA' + 'ABCDEFGHIJKLMNOP';
   assert.ok(!html.includes('<script>alert(1)'), 'target must be escaped');
   assert.ok(!html.includes('<img src=x'), 'title must be escaped');
   assert.ok(html.includes('&lt;img src=x'));
+}
+
+// Attack modules run only against loopback: IPv6 included (URL keeps the brackets), look-alike names excluded.
+{
+  for (const h of ['localhost', 'LOCALHOST', '127.0.0.1', '::1', '[::1]', '0.0.0.0']) assert.ok(isLocalHost(h), h);
+  assert.ok(isLocalHost(new URL('http://[::1]:3000/').hostname), 'hostname of an IPv6 URL');
+  for (const h of ['localhost.evil.com', 'evil.com', '127.0.0.1.nip.io', 'www.localhost', '10.0.0.5', '192.168.1.1', '[::2]', '', 'example.com:80']) {
+    assert.ok(!isLocalHost(h), h);
+  }
 }
 
 console.log('All unit checks passed.');

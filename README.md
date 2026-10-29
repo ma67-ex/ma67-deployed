@@ -52,14 +52,14 @@ macOS/Linux by default) for the GitHub-URL and zip-upload audit modes.
 
 ```bash
 git clone https://github.com/ma67-ex/ma67-deployed.git
-cd deploysafe-clone
+cd ma67-deployed
 npm install
 node server.js
 ```
 
 Then open `http://localhost:4100`.
 
-To verify the install: `node test_smoke.js` while the server's running —
+To verify the install: `npm test` runs the unit checks (no server needed), and `npm run smoke` (`node test_smoke.js`) while the server's running —
 checks the auth gate, GitHub-URL validation, codebase audit, and a clean
 self-scan.
 

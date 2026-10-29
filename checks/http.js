@@ -90,4 +90,12 @@ async function resolveFinalUrl(url, maxHops = 5) {
   return current;
 }
 
-module.exports = { HEADER_VALUES, finding, fetchSafe, sanitizeAuth, withAuth, resolveFinalUrl };
+// The only hosts the attack-simulation checks may touch. 0.0.0.0 is how a local server often reports itself.
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0']);
+
+// URL.hostname keeps the brackets on an IPv6 literal ("[::1]"), so strip them before comparing, or the IPv6
+// loopback address the README promises would never match. Names like localhost.evil.com or 127.0.0.1.nip.io
+// are not local and must stay out.
+const isLocalHost = (hostname) => LOCAL_HOSTNAMES.has(String(hostname).replace(/^\[|\]$/g, '').toLowerCase());
+
+module.exports = { HEADER_VALUES, finding, fetchSafe, sanitizeAuth, withAuth, resolveFinalUrl, isLocalHost };

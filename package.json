@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test_unit.js",
+    "smoke": "node test_smoke.js"
   },
   "keywords": [],
   "author": "",
