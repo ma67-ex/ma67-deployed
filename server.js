@@ -11,7 +11,7 @@ const { discoverRoutes } = require('./checks/crawl');
 const { findSecrets } = require('./checks/secrets');
 const { checkHeaderGrade } = require('./checks/headers');
 const { annotateFindings } = require('./checks/fixes');
-const { sanitizeAuth, withAuth, resolveFinalUrl } = require('./checks/http');
+const { sanitizeAuth, withAuth, resolveFinalUrl, isLocalHost } = require('./checks/http');
 const history = require('./history');
 const monitors = require('./monitors');
 const report = require('./report');
@@ -67,32 +67,20 @@ app.use(express.static('public'));
 
 const PORT = process.env.PORT || 4100;
 
-const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0']);
-
-function isPrivateIp(ip) {
-  if (net.isIPv4(ip)) {
-    const [a, b] = ip.split('.').map(Number);
-    return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a === 0;
-  }
-  if (net.isIPv6(ip)) return ip === '::1' || ip.startsWith('fc') || ip.startsWith('fe80');
-  return false;
-}
-
 // Authorization gate: only scan localhost/private targets automatically.
 // A public hostname is allowed ONLY if the client sent an explicit
 // ownership attestation (checkbox in the UI) — this is a UI-level control,
 // not a security boundary; it exists to keep this tool from being a
 // one-click "attack any site" button.
 async function assertAuthorized(hostname, attested) {
-  if (LOCAL_HOSTNAMES.has(hostname)) return;
+  if (isLocalHost(hostname)) return;
   if (attested !== true) {
     const err = new Error('Target not authorized. Only localhost/private IPs are scanned automatically; a public domain requires the ownership checkbox.');
     err.code = 'UNAUTHORIZED_TARGET';
     throw err;
   }
-  // Still block scanning something that resolves to a private IP range
-  // pretending to be public, and vice versa — just resolve and log; no
-  // extra restriction once attested, since the user vouched for it.
+  // Once attested, a public name only has to resolve: the user vouched for it. It is still scanned
+  // passively, never with the attack-simulation modules (see isLocalHost).
   try {
     await dns.lookup(hostname);
   } catch {
@@ -131,7 +119,7 @@ async function resolveTarget(res, url, attested) {
 // One full live scan: route discovery + every check, optionally carrying a
 // logged-in session (Cookie/Authorization) to same-origin requests only.
 async function performScan(base, hostname, { onProgress, authHeaders } = {}) {
-  const aggressive = LOCAL_HOSTNAMES.has(hostname);
+  const aggressive = isLocalHost(hostname);
   return withAuth(new URL(base).origin, authHeaders, async () => {
     onProgress?.('Route Discovery');
     const surface = await discoverRoutes(base);
@@ -149,7 +137,7 @@ app.post('/api/scan', async (req, res) => {
   const authHeaders = sanitizeAuth(auth);
   res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Transfer-Encoding': 'chunked' });
   const send = (obj) => res.write(JSON.stringify(obj) + '\n');
-  send({ type: 'start', base: t.base, aggressive: LOCAL_HOSTNAMES.has(t.hostname), authenticated: !!authHeaders });
+  send({ type: 'start', base: t.base, aggressive: isLocalHost(t.hostname), authenticated: !!authHeaders });
 
   const scan = await performScan(t.base, t.hostname, {
     authHeaders,
@@ -190,7 +178,7 @@ app.post('/api/tools/api-keys', async (req, res) => {
 
 async function runMonitor(m, trigger) {
   const hostname = new URL(m.url).hostname;
-  if (!LOCAL_HOSTNAMES.has(hostname) && m.attested !== true) throw new Error('monitor target is not attested');
+  if (!isLocalHost(hostname) && m.attested !== true) throw new Error('monitor target is not attested');
   const scan = await performScan(m.url, hostname);
   const result = withHistory(m.url, scan.findings, scoreOf(scan.findings));
   const updated = monitors.recordRun(m.id, {
