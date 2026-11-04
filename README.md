@@ -65,6 +65,14 @@ self-scan.
 
 ## Safety model
 
+- The server listens on `127.0.0.1` only (set `HOST` to change it). It rejects requests whose `Host` or
+  `Origin` is not local, so a hostile web page cannot drive it or reach it by DNS rebinding.
+- Scans never touch private, loopback, link-local or cloud-metadata addresses, even through redirects or a
+  hostname that resolves to one. Only the literal `localhost` target is exempt.
+- Set `AUDIT_TOKEN` to require an `X-Token` header on the monitor and audit routes (the UI asks once).
+  The local-path audit is limited to `AUDIT_ROOT`, default your home directory.
+- Uploaded zips have symlinks removed before scanning.
+
 - The 17 attack-simulation modules are hard-gated to literal `localhost` /
   `127.0.0.1` / `::1` in `server.js` — the ownership checkbox in the UI
   **cannot** unlock them for a public target. Don't remove that gate; it's
