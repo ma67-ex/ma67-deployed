@@ -60,6 +60,36 @@ app.use((req, res, next) => {
   next();
 });
 
+// Browser-origin protection for a localhost tool: a hostile web page must not be able to drive it (CSRF) or
+// reach it through DNS rebinding. Host must be a loopback name unless ALLOWED_HOSTS lists it, and any Origin
+// header must match the Host.
+const ALLOWED_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', ...(process.env.ALLOWED_HOSTS || '').split(',').filter(Boolean)]);
+app.use((req, res, next) => {
+  const hostName = String(req.headers.host || '').replace(/:\d+$/, '').toLowerCase();
+  if (!ALLOWED_HOSTS.has(hostName)) return res.status(403).json({ error: 'Host not allowed.' });
+  const origin = req.headers.origin;
+  if (origin) {
+    let originHost = null;
+    try { originHost = new URL(origin).host; } catch { /* malformed or "null": blocked below */ }
+    if (originHost !== req.headers.host) return res.status(403).json({ error: 'Cross-origin request blocked.' });
+  }
+  next();
+});
+
+// Optional shared secret for the routes that read the filesystem or hold state. Set AUDIT_TOKEN and send it as
+// the X-Token header (the UI asks once and remembers it). Compared in constant time.
+const AUDIT_TOKEN = process.env.AUDIT_TOKEN || '';
+function requireToken(req, res, next) {
+  if (!AUDIT_TOKEN) return next();
+  const got = Buffer.from(String(req.headers['x-token'] || ''));
+  const want = Buffer.from(AUDIT_TOKEN);
+  if (got.length !== want.length || !require('crypto').timingSafeEqual(got, want)) {
+    return res.status(401).json({ error: 'Missing or wrong X-Token.', code: 'AUTH' });
+  }
+  next();
+}
+app.use(['/api/monitors', '/api/audit'], requireToken);
+
 app.use(express.json());
 app.use(express.static('public'));
 
@@ -337,6 +367,10 @@ app.post('/api/audit', async (req, res) => {
     return res.status(400).json({ error: 'Enter a local repo path to audit.' });
   }
   const resolved = path.resolve(repoPath.replace(/^~/, os.homedir()));
+  const root = path.resolve((process.env.AUDIT_ROOT || os.homedir()).replace(/^~/, os.homedir()));
+  if (resolved !== root && !resolved.startsWith(root.endsWith(path.sep) ? root : root + path.sep)) {
+    return res.status(403).json({ error: `Path must be inside ${root} (set AUDIT_ROOT to change).` });
+  }
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
     return res.status(400).json({ error: `Not a directory: ${resolved}` });
   }

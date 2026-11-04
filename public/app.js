@@ -1,3 +1,15 @@
+// Sends the optional AUDIT_TOKEN (X-Token) on every API call; asks once if the server demands it.
+const _fetch = window.fetch.bind(window);
+window.fetch = async (url, opts = {}) => {
+  const send = () => _fetch(url, { ...opts, headers: { ...(opts.headers || {}), 'X-Token': localStorage.getItem('auditToken') || '' } });
+  let res = await send();
+  if (res.status === 401) {
+    const t = window.prompt('This server requires an access token (AUDIT_TOKEN):');
+    if (t) { localStorage.setItem('auditToken', t); res = await send(); }
+  }
+  return res;
+};
+
 const MODULES = [
   ['SQL Injection', 'Full database access'],
   ['Auth Bypass', 'Anyone becomes admin'],
