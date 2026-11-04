@@ -52,18 +52,26 @@ macOS/Linux by default) for the GitHub-URL and zip-upload audit modes.
 
 ```bash
 git clone https://github.com/ma67-ex/ma67-deployed.git
-cd deploysafe-clone
+cd ma67-deployed
 npm install
 node server.js
 ```
 
 Then open `http://localhost:4100`.
 
-To verify the install: `node test_smoke.js` while the server's running —
+To verify the install: `npm test` runs the unit checks (no server needed), and `npm run smoke` (`node test_smoke.js`) while the server's running —
 checks the auth gate, GitHub-URL validation, codebase audit, and a clean
 self-scan.
 
 ## Safety model
+
+- The server listens on `127.0.0.1` only (set `HOST` to change it). It rejects requests whose `Host` or
+  `Origin` is not local, so a hostile web page cannot drive it or reach it by DNS rebinding.
+- Scans never touch private, loopback, link-local or cloud-metadata addresses, even through redirects or a
+  hostname that resolves to one. Only the literal `localhost` target is exempt.
+- Set `AUDIT_TOKEN` to require an `X-Token` header on the monitor and audit routes (the UI asks once).
+  The local-path audit is limited to `AUDIT_ROOT`, default your home directory.
+- Uploaded zips have symlinks removed before scanning.
 
 - The 17 attack-simulation modules are hard-gated to literal `localhost` /
   `127.0.0.1` / `::1` in `server.js` — the ownership checkbox in the UI

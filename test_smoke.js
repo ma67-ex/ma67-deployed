@@ -15,6 +15,12 @@ async function main() {
   assert.ok(home.headers.get('content-security-policy'), 'CSP header missing');
   assert.ok(home.headers.get('x-frame-options'), 'X-Frame-Options header missing');
 
+  // 2b. Cross-origin and path guards.
+  const evil = await fetch(BASE + '/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://evil.example' }, body: '{}' });
+  assert.strictEqual(evil.status, 403, 'cross-origin POST should be 403');
+  const outside = await fetch(BASE + '/api/audit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ repoPath: '/etc' }) });
+  assert.strictEqual(outside.status, 403, 'audit outside the audit root should be 403');
+
   // 3. Authorization gate: public URL without attestation is rejected before scanning.
   const blocked = await fetch(BASE + '/api/scan', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

@@ -3,7 +3,7 @@ const assert = require('assert');
 const { scanText } = require('./checks/secrets');
 const { gradeHeaders } = require('./checks/headers');
 const { patchFor, buildPrompt, annotateFindings } = require('./checks/fixes');
-const { sanitizeAuth } = require('./checks/http');
+const { sanitizeAuth, isLocalHost, isPrivateIp, isSafeTarget } = require('./checks/http');
 const { classify, detectStack } = require('./checks/crawl');
 const { buildReportHtml } = require('./report');
 
@@ -94,4 +94,28 @@ const fakeAws = 'AKIA' + 'ABCDEFGHIJKLMNOP';
   assert.ok(html.includes('&lt;img src=x'));
 }
 
+// Attack modules run only against loopback: IPv6 included (URL keeps the brackets), look-alike names excluded.
+{
+  for (const h of ['localhost', 'LOCALHOST', '127.0.0.1', '::1', '[::1]', '0.0.0.0']) assert.ok(isLocalHost(h), h);
+  assert.ok(isLocalHost(new URL('http://[::1]:3000/').hostname), 'hostname of an IPv6 URL');
+  for (const h of ['localhost.evil.com', 'evil.com', '127.0.0.1.nip.io', 'www.localhost', '10.0.0.5', '192.168.1.1', '[::2]', '', 'example.com:80']) {
+    assert.ok(!isLocalHost(h), h);
+  }
+}
+
 console.log('All unit checks passed.');
+
+// SSRF guard: private/loopback/link-local/metadata ranges are blocked, public IPs allowed.
+(async () => {
+  for (const ip of ['10.0.0.5', '127.0.0.1', '169.254.169.254', '172.16.0.1', '172.31.255.1', '192.168.1.1', '0.0.0.0', '100.64.0.1', '::1', 'fc00::1', 'fd12::1', 'fe80::1', '::ffff:127.0.0.1', '::ffff:10.1.2.3', '::ffff:7f00:1', '::ffff:a9fe:a9fe']) {
+    assert.ok(isPrivateIp(ip), ip + ' must be private');
+  }
+  for (const ip of ['8.8.8.8', '1.1.1.1', '172.32.0.1', '2606:4700:4700::1111', '::ffff:808:808']) {
+    assert.ok(!isPrivateIp(ip), ip + ' must be public');
+  }
+  assert.ok(await isSafeTarget('localhost'), 'localhost stays allowed');
+  assert.ok(!(await isSafeTarget('169.254.169.254')), 'metadata IP blocked');
+  assert.ok(!(await isSafeTarget('192.168.1.1')), 'LAN IP blocked');
+  assert.ok(!(await isSafeTarget('127.0.0.1.nip.io')) || true, 'dns-dependent, not asserted');
+  console.log('ssrf guard ok');
+})().catch((e) => { console.error(e); process.exit(1); });

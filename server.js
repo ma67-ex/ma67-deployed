@@ -1,6 +1,4 @@
 const express = require('express');
-const dns = require('dns').promises;
-const net = require('net');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -11,7 +9,7 @@ const { discoverRoutes } = require('./checks/crawl');
 const { findSecrets } = require('./checks/secrets');
 const { checkHeaderGrade } = require('./checks/headers');
 const { annotateFindings } = require('./checks/fixes');
-const { sanitizeAuth, withAuth, resolveFinalUrl } = require('./checks/http');
+const { sanitizeAuth, withAuth, resolveFinalUrl, isLocalHost, isSafeTarget } = require('./checks/http');
 const history = require('./history');
 const monitors = require('./monitors');
 const report = require('./report');
@@ -62,21 +60,40 @@ app.use((req, res, next) => {
   next();
 });
 
+// Browser-origin protection for a localhost tool: a hostile web page must not be able to drive it (CSRF) or
+// reach it through DNS rebinding. Host must be a loopback name unless ALLOWED_HOSTS lists it, and any Origin
+// header must match the Host.
+const ALLOWED_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', ...(process.env.ALLOWED_HOSTS || '').split(',').filter(Boolean)]);
+app.use((req, res, next) => {
+  const hostName = String(req.headers.host || '').replace(/:\d+$/, '').toLowerCase();
+  if (!ALLOWED_HOSTS.has(hostName)) return res.status(403).json({ error: 'Host not allowed.' });
+  const origin = req.headers.origin;
+  if (origin) {
+    let originHost = null;
+    try { originHost = new URL(origin).host; } catch { /* malformed or "null": blocked below */ }
+    if (originHost !== req.headers.host) return res.status(403).json({ error: 'Cross-origin request blocked.' });
+  }
+  next();
+});
+
+// Optional shared secret for the routes that read the filesystem or hold state. Set AUDIT_TOKEN and send it as
+// the X-Token header (the UI asks once and remembers it). Compared in constant time.
+const AUDIT_TOKEN = process.env.AUDIT_TOKEN || '';
+function requireToken(req, res, next) {
+  if (!AUDIT_TOKEN) return next();
+  const got = Buffer.from(String(req.headers['x-token'] || ''));
+  const want = Buffer.from(AUDIT_TOKEN);
+  if (got.length !== want.length || !require('crypto').timingSafeEqual(got, want)) {
+    return res.status(401).json({ error: 'Missing or wrong X-Token.', code: 'AUTH' });
+  }
+  next();
+}
+app.use(['/api/monitors', '/api/audit'], requireToken);
+
 app.use(express.json());
 app.use(express.static('public'));
 
 const PORT = process.env.PORT || 4100;
-
-const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0']);
-
-function isPrivateIp(ip) {
-  if (net.isIPv4(ip)) {
-    const [a, b] = ip.split('.').map(Number);
-    return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a === 0;
-  }
-  if (net.isIPv6(ip)) return ip === '::1' || ip.startsWith('fc') || ip.startsWith('fe80');
-  return false;
-}
 
 // Authorization gate: only scan localhost/private targets automatically.
 // A public hostname is allowed ONLY if the client sent an explicit
@@ -84,20 +101,17 @@ function isPrivateIp(ip) {
 // not a security boundary; it exists to keep this tool from being a
 // one-click "attack any site" button.
 async function assertAuthorized(hostname, attested) {
-  if (LOCAL_HOSTNAMES.has(hostname)) return;
+  if (isLocalHost(hostname)) return;
   if (attested !== true) {
-    const err = new Error('Target not authorized. Only localhost/private IPs are scanned automatically; a public domain requires the ownership checkbox.');
+    const err = new Error('Target not authorized. Only localhost is scanned automatically; a public domain requires the ownership checkbox.');
     err.code = 'UNAUTHORIZED_TARGET';
     throw err;
   }
-  // Still block scanning something that resolves to a private IP range
-  // pretending to be public, and vice versa — just resolve and log; no
-  // extra restriction once attested, since the user vouched for it.
-  try {
-    await dns.lookup(hostname);
-  } catch {
-    const err = new Error('Target hostname does not resolve.');
-    err.code = 'DNS_FAIL';
+  // Once attested, the name must resolve and every address must be public: private, loopback,
+  // link-local and cloud-metadata ranges are never scanned (SSRF guard).
+  if (!(await isSafeTarget(hostname))) {
+    const err = new Error('Target does not resolve to a public address. Private, loopback and link-local addresses are blocked.');
+    err.code = 'BLOCKED_TARGET';
     throw err;
   }
 }
@@ -131,7 +145,7 @@ async function resolveTarget(res, url, attested) {
 // One full live scan: route discovery + every check, optionally carrying a
 // logged-in session (Cookie/Authorization) to same-origin requests only.
 async function performScan(base, hostname, { onProgress, authHeaders } = {}) {
-  const aggressive = LOCAL_HOSTNAMES.has(hostname);
+  const aggressive = isLocalHost(hostname);
   return withAuth(new URL(base).origin, authHeaders, async () => {
     onProgress?.('Route Discovery');
     const surface = await discoverRoutes(base);
@@ -149,7 +163,7 @@ app.post('/api/scan', async (req, res) => {
   const authHeaders = sanitizeAuth(auth);
   res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Transfer-Encoding': 'chunked' });
   const send = (obj) => res.write(JSON.stringify(obj) + '\n');
-  send({ type: 'start', base: t.base, aggressive: LOCAL_HOSTNAMES.has(t.hostname), authenticated: !!authHeaders });
+  send({ type: 'start', base: t.base, aggressive: isLocalHost(t.hostname), authenticated: !!authHeaders });
 
   const scan = await performScan(t.base, t.hostname, {
     authHeaders,
@@ -190,7 +204,7 @@ app.post('/api/tools/api-keys', async (req, res) => {
 
 async function runMonitor(m, trigger) {
   const hostname = new URL(m.url).hostname;
-  if (!LOCAL_HOSTNAMES.has(hostname) && m.attested !== true) throw new Error('monitor target is not attested');
+  if (!isLocalHost(hostname) && m.attested !== true) throw new Error('monitor target is not attested');
   const scan = await performScan(m.url, hostname);
   const result = withHistory(m.url, scan.findings, scoreOf(scan.findings));
   const updated = monitors.recordRun(m.id, {
@@ -273,6 +287,16 @@ app.get('/report/:id', (req, res) => {
 // a local path the user types, same trust model as them running the skill
 // directly — no network targeting, so no ownership attestation needed.
 
+// A hostile zip can carry symlinks (e.g. to /etc/passwd) that the scanner would then read. Delete every
+// symlink after extraction, before anything touches the tree.
+function removeSymlinks(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isSymbolicLink()) fs.unlinkSync(full);
+    else if (entry.isDirectory()) removeSymlinks(full);
+  }
+}
+
 function runChecklistScan(repoPath) {
   return new Promise((resolve, reject) => {
     execFile('python3', [CHECKLIST_SCAN_PY, repoPath], { maxBuffer: 20 * 1024 * 1024, timeout: 60_000 }, (err, stdout, stderr) => {
@@ -353,6 +377,10 @@ app.post('/api/audit', async (req, res) => {
     return res.status(400).json({ error: 'Enter a local repo path to audit.' });
   }
   const resolved = path.resolve(repoPath.replace(/^~/, os.homedir()));
+  const root = path.resolve((process.env.AUDIT_ROOT || os.homedir()).replace(/^~/, os.homedir()));
+  if (resolved !== root && !resolved.startsWith(root.endsWith(path.sep) ? root : root + path.sep)) {
+    return res.status(403).json({ error: `Path must be inside ${root} (set AUDIT_ROOT to change).` });
+  }
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
     return res.status(400).json({ error: `Not a directory: ${resolved}` });
   }
@@ -368,10 +396,12 @@ app.post('/api/audit/upload', upload.single('zipfile'), async (req, res) => {
   try {
     await new Promise((resolve, reject) => {
       execFile('unzip', ['-q', '-o', req.file.path, '-d', tmpDir], { timeout: 30_000 }, (err, _out, stderr) => {
-        if (err) return reject(new Error(stderr || 'Could not extract zip — is it a valid .zip file?'));
+        // unzip may refuse to create a hostile symlink and exit non-zero; tolerated only when every error line is a symlink error, so a corrupt zip still fails.
+        if (err && !(stderr || '').split('\n').filter(Boolean).every((l) => /symlink error/.test(l))) return reject(new Error(stderr || 'Could not extract zip — is it a valid .zip file?'));
         resolve();
       });
     });
+    removeSymlinks(tmpDir);
   } catch (e) {
     fs.rm(tmpDir, { recursive: true, force: true }, () => {});
     fs.unlink(req.file.path, () => {});
@@ -426,4 +456,7 @@ function withHistory(targetKey, findings, riskScore) {
 
 monitors.startScheduler(runMonitor);
 
-app.listen(PORT, () => console.log(`deploysafe-clone running at http://localhost:${PORT}`));
+// Loopback only by default: this tool reads local paths and scans URLs, so it must not be reachable from the
+// network. Set HOST=0.0.0.0 only behind your own auth (and set AUDIT_TOKEN).
+const HOST = process.env.HOST || '127.0.0.1';
+app.listen(PORT, HOST, () => console.log(`deploysafe-clone running at http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT}`));
