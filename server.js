@@ -410,4 +410,7 @@ function withHistory(targetKey, findings, riskScore) {
 
 monitors.startScheduler(runMonitor);
 
-app.listen(PORT, () => console.log(`deploysafe-clone running at http://localhost:${PORT}`));
+// Loopback only by default: this tool reads local paths and scans URLs, so it must not be reachable from the
+// network. Set HOST=0.0.0.0 only behind your own auth (and set AUDIT_TOKEN).
+const HOST = process.env.HOST || '127.0.0.1';
+app.listen(PORT, HOST, () => console.log(`deploysafe-clone running at http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT}`));
