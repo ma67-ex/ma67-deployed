@@ -287,6 +287,16 @@ app.get('/report/:id', (req, res) => {
 // a local path the user types, same trust model as them running the skill
 // directly — no network targeting, so no ownership attestation needed.
 
+// A hostile zip can carry symlinks (e.g. to /etc/passwd) that the scanner would then read. Delete every
+// symlink after extraction, before anything touches the tree.
+function removeSymlinks(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isSymbolicLink()) fs.unlinkSync(full);
+    else if (entry.isDirectory()) removeSymlinks(full);
+  }
+}
+
 function runChecklistScan(repoPath) {
   return new Promise((resolve, reject) => {
     execFile('python3', [CHECKLIST_SCAN_PY, repoPath], { maxBuffer: 20 * 1024 * 1024, timeout: 60_000 }, (err, stdout, stderr) => {
@@ -386,10 +396,12 @@ app.post('/api/audit/upload', upload.single('zipfile'), async (req, res) => {
   try {
     await new Promise((resolve, reject) => {
       execFile('unzip', ['-q', '-o', req.file.path, '-d', tmpDir], { timeout: 30_000 }, (err, _out, stderr) => {
-        if (err) return reject(new Error(stderr || 'Could not extract zip — is it a valid .zip file?'));
+        // unzip may refuse to create a hostile symlink and exit non-zero; tolerated only when every error line is a symlink error, so a corrupt zip still fails.
+        if (err && !(stderr || '').split('\n').filter(Boolean).every((l) => /symlink error/.test(l))) return reject(new Error(stderr || 'Could not extract zip — is it a valid .zip file?'));
         resolve();
       });
     });
+    removeSymlinks(tmpDir);
   } catch (e) {
     fs.rm(tmpDir, { recursive: true, force: true }, () => {});
     fs.unlink(req.file.path, () => {});
