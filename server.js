@@ -1,6 +1,4 @@
 const express = require('express');
-const dns = require('dns').promises;
-const net = require('net');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -11,7 +9,7 @@ const { discoverRoutes } = require('./checks/crawl');
 const { findSecrets } = require('./checks/secrets');
 const { checkHeaderGrade } = require('./checks/headers');
 const { annotateFindings } = require('./checks/fixes');
-const { sanitizeAuth, withAuth, resolveFinalUrl, isLocalHost } = require('./checks/http');
+const { sanitizeAuth, withAuth, resolveFinalUrl, isLocalHost, isSafeTarget } = require('./checks/http');
 const history = require('./history');
 const monitors = require('./monitors');
 const report = require('./report');
@@ -75,17 +73,15 @@ const PORT = process.env.PORT || 4100;
 async function assertAuthorized(hostname, attested) {
   if (isLocalHost(hostname)) return;
   if (attested !== true) {
-    const err = new Error('Target not authorized. Only localhost/private IPs are scanned automatically; a public domain requires the ownership checkbox.');
+    const err = new Error('Target not authorized. Only localhost is scanned automatically; a public domain requires the ownership checkbox.');
     err.code = 'UNAUTHORIZED_TARGET';
     throw err;
   }
-  // Once attested, a public name only has to resolve: the user vouched for it. It is still scanned
-  // passively, never with the attack-simulation modules (see isLocalHost).
-  try {
-    await dns.lookup(hostname);
-  } catch {
-    const err = new Error('Target hostname does not resolve.');
-    err.code = 'DNS_FAIL';
+  // Once attested, the name must resolve and every address must be public: private, loopback,
+  // link-local and cloud-metadata ranges are never scanned (SSRF guard).
+  if (!(await isSafeTarget(hostname))) {
+    const err = new Error('Target does not resolve to a public address. Private, loopback and link-local addresses are blocked.');
+    err.code = 'BLOCKED_TARGET';
     throw err;
   }
 }

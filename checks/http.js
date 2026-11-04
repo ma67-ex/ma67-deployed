@@ -4,6 +4,8 @@
 // origin, so a Cookie/Authorization header can never leak to OSV, Supabase,
 // Firestore or any other third party a check happens to call.
 const { AsyncLocalStorage } = require('async_hooks');
+const dns = require('dns').promises;
+const net = require('net');
 
 const authStore = new AsyncLocalStorage();
 
@@ -19,6 +21,39 @@ function finding(id, title, severity, evidence, fix) {
   return { id, title, severity, evidence, fix };
 }
 
+// SSRF guard: a scan must never reach loopback, LAN, link-local or cloud-metadata addresses unless the
+// target is literally localhost (see isLocalHost). Checked on every request, so redirects and hostnames
+// that resolve to private IPs are covered too.
+// ponytail: resolve-then-fetch leaves a small DNS-rebinding window; pin the IP with an undici dispatcher if needed.
+function isPrivateIp(ip) {
+  ip = String(ip).toLowerCase().replace(/^\[|\]$/g, '');
+  const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) ip = mapped[1];
+  const hex = ip.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/); // hex form of IPv4-mapped IPv6
+  if (hex) {
+    const n = (parseInt(hex[1], 16) << 16) | parseInt(hex[2], 16);
+    ip = [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
+  }
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split('.').map(Number);
+    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0) || a >= 224;
+  }
+  if (net.isIPv6(ip)) return ip === '::' || ip === '::1' || /^f[cd]/.test(ip) || /^fe[89ab]/.test(ip);
+  return true; // not an IP at all: fail closed
+}
+
+// True when hostname is localhost, or resolves only to public addresses.
+async function isSafeTarget(hostname) {
+  if (isLocalHost(hostname)) return true;
+  try {
+    const addrs = await dns.lookup(String(hostname).replace(/^\[|\]$/g, ''), { all: true });
+    return addrs.length > 0 && addrs.every((a) => !isPrivateIp(a.address));
+  } catch {
+    return false;
+  }
+}
+
 async function fetchSafe(url, opts = {}) {
   const auth = authStore.getStore();
   let headers = opts.headers;
@@ -28,6 +63,7 @@ async function fetchSafe(url, opts = {}) {
     } catch { /* unparseable URL: send without auth */ }
   }
   try {
+    if (!(await isSafeTarget(new URL(url).hostname))) return null;
     return await fetch(url, {
       redirect: 'manual',
       signal: AbortSignal.timeout(6000),
@@ -98,4 +134,4 @@ const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0']);
 // are not local and must stay out.
 const isLocalHost = (hostname) => LOCAL_HOSTNAMES.has(String(hostname).replace(/^\[|\]$/g, '').toLowerCase());
 
-module.exports = { HEADER_VALUES, finding, fetchSafe, sanitizeAuth, withAuth, resolveFinalUrl, isLocalHost };
+module.exports = { HEADER_VALUES, finding, fetchSafe, sanitizeAuth, withAuth, resolveFinalUrl, isLocalHost, isPrivateIp, isSafeTarget };
